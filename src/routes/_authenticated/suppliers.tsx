@@ -36,13 +36,19 @@ function Suppliers() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim() || null])) as Record<string, string | null>;
-      payload.company_name = form.company_name.trim();
+      const payload = {
+        company_name: form.company_name.trim(),
+        contact_person: form.contact_person.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        address: form.address.trim() || null,
+        notes: form.notes.trim() || null,
+      };
       if (editing) {
         const { error } = await supabase.from("suppliers").update(payload).eq("id", editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("suppliers").insert(payload as { company_name: string });
+        const { error } = await supabase.from("suppliers").insert(payload);
         if (error) throw error;
       }
     },
