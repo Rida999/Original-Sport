@@ -7,6 +7,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 .npm-cache/
+.local_pg/
+.local_pg_data/
 
 node_modules
 dist

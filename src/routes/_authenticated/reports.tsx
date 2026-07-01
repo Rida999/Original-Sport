@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { listReportProducts } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
@@ -14,17 +14,23 @@ export const Route = createFileRoute("/_authenticated/reports")({
 function Reports() {
   const { data } = useQuery({
     queryKey: ["reports"],
-    queryFn: async () => {
-      const { data: products } = await supabase.from("products").select("id,name,barcode,quantity,min_stock,selling_price,purchase_price");
-      return products ?? [];
-    },
+    queryFn: async () => listReportProducts(),
   });
 
   const exportCsv = () => {
     if (!data) return;
     const headers = ["Barcode", "Name", "Quantity", "Min stock", "Purchase price", "Selling price"];
-    const rows = data.map((p) => [p.barcode, p.name, p.quantity, p.min_stock, p.purchase_price, p.selling_price]);
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const rows = data.map((p) => [
+      p.barcode,
+      p.name,
+      p.quantity,
+      p.min_stock,
+      p.purchase_price,
+      p.selling_price,
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -44,18 +50,35 @@ function Reports() {
           <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
           <p className="text-sm text-muted-foreground">Inventory snapshot</p>
         </div>
-        <Button onClick={exportCsv} size="sm" variant="outline"><Download className="size-4 mr-1.5" /> Export CSV</Button>
+        <Button onClick={exportCsv} size="sm" variant="outline">
+          <Download className="size-4 mr-1.5" /> Export CSV
+        </Button>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Inventory value (retail)</div><div className="text-2xl font-semibold mt-2">{money(total)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Inventory cost</div><div className="text-2xl font-semibold mt-2">{money(cost)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Low stock items</div><div className="text-2xl font-semibold mt-2 text-warning">{lowStock}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Out of stock</div><div className="text-2xl font-semibold mt-2 text-destructive">{outOfStock}</div></Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground">Inventory value (retail)</div>
+          <div className="text-2xl font-semibold mt-2">{money(total)}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground">Inventory cost</div>
+          <div className="text-2xl font-semibold mt-2">{money(cost)}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground">Low stock items</div>
+          <div className="text-2xl font-semibold mt-2 text-warning">{lowStock}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted-foreground">Out of stock</div>
+          <div className="text-2xl font-semibold mt-2 text-destructive">{outOfStock}</div>
+        </Card>
       </div>
 
       <Card className="p-4">
-        <p className="text-sm text-muted-foreground">Additional report types (PDF export, sales reports, supplier reports) ship in the next phase.</p>
+        <p className="text-sm text-muted-foreground">
+          Additional report types (PDF export, sales reports, supplier reports) ship in the next
+          phase.
+        </p>
       </Card>
     </div>
   );

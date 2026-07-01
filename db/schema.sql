@@ -1,0 +1,111 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+DO $$ BEGIN
+  CREATE TYPE product_gender AS ENUM ('men', 'women', 'unisex', 'kids');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE product_status AS ENUM ('available', 'out_of_stock', 'discontinued');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS brands (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_name TEXT NOT NULL,
+  contact_person TEXT,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  barcode TEXT NOT NULL UNIQUE,
+  article_number TEXT,
+  name TEXT NOT NULL,
+  model_name TEXT,
+  brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  key_category TEXT,
+  age_group TEXT,
+  gender product_gender,
+  sport TEXT,
+  marketing_line TEXT,
+  product_division TEXT,
+  product_line TEXT,
+  product_type TEXT,
+  sub_brand TEXT,
+  color TEXT,
+  size TEXT,
+  purchase_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  selling_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 0,
+  min_stock INTEGER NOT NULL DEFAULT 5,
+  description TEXT,
+  images TEXT[] NOT NULL DEFAULT '{}',
+  source_thumbnail TEXT,
+  status product_status NOT NULL DEFAULT 'available',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS products_article_number_unique
+  ON products(article_number)
+  WHERE article_number IS NOT NULL AND article_number <> '';
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id UUID,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS categories_set_updated_at ON categories;
+CREATE TRIGGER categories_set_updated_at BEFORE UPDATE ON categories
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS brands_set_updated_at ON brands;
+CREATE TRIGGER brands_set_updated_at BEFORE UPDATE ON brands
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS suppliers_set_updated_at ON suppliers;
+CREATE TRIGGER suppliers_set_updated_at BEFORE UPDATE ON suppliers
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS products_set_updated_at ON products;
+CREATE TRIGGER products_set_updated_at BEFORE UPDATE ON products
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();

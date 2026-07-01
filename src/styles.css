@@ -79,10 +79,22 @@
   --sidebar-ring: oklch(0.72 0.16 265);
 }
 
-.dark { /* same theme - app is dark by default */ }
+.dark {
+  /* same theme - app is dark by default */
+}
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html, body { background-color: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); }
-  body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+  body {
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
 }

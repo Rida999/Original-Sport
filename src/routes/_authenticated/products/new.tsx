@@ -10,7 +10,12 @@ export const Route = createFileRoute("/_authenticated/products/new")({
 function NewProduct() {
   return (
     <div className="space-y-4">
-      <Link to="/products" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"><ChevronLeft className="size-4" /> Products</Link>
+      <Link
+        to="/products"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" /> Products
+      </Link>
       <h1 className="text-2xl font-semibold tracking-tight">New product</h1>
       <ProductForm />
     </div>

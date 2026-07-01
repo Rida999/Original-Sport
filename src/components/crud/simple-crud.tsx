@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -8,18 +7,37 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { slugify } from "@/lib/format";
+import { deleteCrud, listCrud, saveCrud } from "@/lib/data";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
 type Row = { id: string; name: string; slug: string; description: string | null };
 
-export function SimpleCrud({ table, singular, plural }: { table: "categories" | "brands"; singular: string; plural: string }) {
+export function SimpleCrud({
+  table,
+  singular,
+  plural,
+}: {
+  table: "categories" | "brands";
+  singular: string;
+  plural: string;
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -29,27 +47,19 @@ export function SimpleCrud({ table, singular, plural }: { table: "categories" | 
 
   const { data, isLoading } = useQuery({
     queryKey: [table],
-    queryFn: async () => {
-      const { data, error } = await supabase.from(table).select("*").order("name");
-      if (error) throw error;
-      return data as Row[];
-    },
+    queryFn: async () => listCrud({ data: { table } }) as Promise<Row[]>,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = { name: name.trim(), slug: slugify(name), description: description.trim() || null };
-      if (editing) {
-        const { error } = await supabase.from(table).update(payload).eq("id", editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from(table).insert(payload);
-        if (error) throw error;
-      }
+      await saveCrud({ data: { table, id: editing?.id, name, description } });
     },
     onSuccess: () => {
       toast.success(editing ? `${singular} updated` : `${singular} added`);
-      setOpen(false); setEditing(null); setName(""); setDescription("");
+      setOpen(false);
+      setEditing(null);
+      setName("");
+      setDescription("");
       qc.invalidateQueries({ queryKey: [table] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
@@ -58,8 +68,7 @@ export function SimpleCrud({ table, singular, plural }: { table: "categories" | 
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from(table).delete().eq("id", id);
-      if (error) throw error;
+      await deleteCrud({ data: { table, id } });
     },
     onSuccess: () => {
       toast.success(`${singular} deleted`);
@@ -69,8 +78,18 @@ export function SimpleCrud({ table, singular, plural }: { table: "categories" | 
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const openNew = () => { setEditing(null); setName(""); setDescription(""); setOpen(true); };
-  const openEdit = (r: Row) => { setEditing(r); setName(r.name); setDescription(r.description ?? ""); setOpen(true); };
+  const openNew = () => {
+    setEditing(null);
+    setName("");
+    setDescription("");
+    setOpen(true);
+  };
+  const openEdit = (r: Row) => {
+    setEditing(r);
+    setName(r.name);
+    setDescription(r.description ?? "");
+    setOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -80,16 +99,38 @@ export function SimpleCrud({ table, singular, plural }: { table: "categories" | 
           <p className="text-sm text-muted-foreground">{data?.length ?? 0} total</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button size="sm" onClick={openNew}><Plus className="size-4 mr-1.5" /> Add {singular.toLowerCase()}</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button size="sm" onClick={openNew}>
+              <Plus className="size-4 mr-1.5" /> Add {singular.toLowerCase()}
+            </Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>{editing ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>
+                {editing ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}
+              </DialogTitle>
+            </DialogHeader>
             <div className="space-y-3">
-              <div className="space-y-1.5"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-              <div className="space-y-1.5"><Label>Description</Label><Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => save.mutate()} disabled={!name.trim() || save.isPending}>Save</Button>
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => save.mutate()} disabled={!name.trim() || save.isPending}>
+                Save
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -106,17 +147,35 @@ export function SimpleCrud({ table, singular, plural }: { table: "categories" | 
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {isLoading && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">Loading…</td></tr>}
-            {!isLoading && data?.length === 0 && <tr><td colSpan={4} className="p-10 text-center text-muted-foreground">No {plural.toLowerCase()} yet.</td></tr>}
+            {isLoading && (
+              <tr>
+                <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!isLoading && data?.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-10 text-center text-muted-foreground">
+                  No {plural.toLowerCase()} yet.
+                </td>
+              </tr>
+            )}
             {data?.map((r) => (
               <tr key={r.id} className="hover:bg-muted/30">
                 <td className="p-3 font-medium">{r.name}</td>
                 <td className="p-3 font-mono text-xs text-muted-foreground">{r.slug}</td>
-                <td className="p-3 text-muted-foreground truncate max-w-md">{r.description ?? "—"}</td>
+                <td className="p-3 text-muted-foreground truncate max-w-md">
+                  {r.description ?? "—"}
+                </td>
                 <td className="p-3">
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(r)}><Pencil className="size-4" /></Button>
-                    <Button size="icon" variant="ghost" onClick={() => setDelId(r.id)}><Trash2 className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => openEdit(r)}>
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => setDelId(r.id)}>
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                 </td>
               </tr>
