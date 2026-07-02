@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE products DROP COLUMN IF EXISTS out_of_stock_since;
+
 CREATE UNIQUE INDEX IF NOT EXISTS products_article_number_unique
   ON products(article_number)
   WHERE article_number IS NOT NULL AND article_number <> '';
@@ -63,6 +65,27 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   metadata JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS import_batches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_name TEXT NOT NULL,
+  item_count INTEGER NOT NULL DEFAULT 0,
+  total_quantity INTEGER NOT NULL DEFAULT 0,
+  undone_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS import_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  import_batch_id UUID NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  barcode TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  quantity_added INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS import_items_batch_id_idx ON import_items(import_batch_id);
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$

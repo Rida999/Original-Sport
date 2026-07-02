@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { listReportProducts } from "@/lib/data";
+import { getSoldProductsReport, listReportProducts } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, ShoppingBag } from "lucide-react";
 import { money } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/reports")({
@@ -15,6 +15,10 @@ function Reports() {
   const { data } = useQuery({
     queryKey: ["reports"],
     queryFn: async () => listReportProducts(),
+  });
+  const { data: soldReport } = useQuery({
+    queryKey: ["sold-products-report"],
+    queryFn: async () => getSoldProductsReport(),
   });
 
   const exportCsv = () => {
@@ -75,9 +79,69 @@ function Reports() {
       </div>
 
       <Card className="p-4">
-        <p className="text-sm text-muted-foreground">
-          Additional report types (PDF export, sales reports) ship in the next phase.
-        </p>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="font-semibold text-sm flex items-center gap-2">
+              <ShoppingBag className="size-4 text-primary" />
+              Sold products
+            </h2>
+          </div>
+          <div className="flex items-center gap-6 text-right">
+            <div>
+              <div className="text-xs text-muted-foreground">Total quantity</div>
+              <div className="text-2xl font-semibold tabular-nums">
+                {soldReport?.totalSold ?? 0}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Total price</div>
+              <div className="text-2xl font-semibold tabular-nums">
+                {money(soldReport?.totalSales)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {(soldReport?.products.length ?? 0) === 0 ? (
+          <div className="text-sm text-muted-foreground py-8 text-center">
+            No sold products yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Product</th>
+                  <th className="py-2 px-3 font-medium">Barcode</th>
+                  <th className="py-2 px-3 font-medium text-right">Sold</th>
+                  <th className="py-2 px-3 font-medium text-right">Unit price</th>
+                  <th className="py-2 px-3 font-medium text-right">Total</th>
+                  <th className="py-2 pl-3 font-medium">Last sold</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {soldReport?.products.map((product) => (
+                  <tr key={product.id}>
+                    <td className="py-2 pr-3 font-medium">{product.name}</td>
+                    <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
+                      {product.barcode}
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">{product.quantity_sold}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      {money(product.selling_price)}
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums font-medium">
+                      {money(product.total_sales)}
+                    </td>
+                    <td className="py-2 pl-3 text-muted-foreground">
+                      {new Date(product.last_sold_at).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
