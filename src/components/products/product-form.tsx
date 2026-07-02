@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { listBrandOptions, listCategoryOptions, saveProduct } from "@/lib/data";
+import { listCategoryOptions, saveProduct } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ const schema = z.object({
   article_number: z.string().max(100).optional(),
   name: z.string().min(2, "Required").max(200),
   model_name: z.string().max(200).optional(),
-  brand_id: z.string().uuid().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
   key_category: z.string().max(200).optional(),
   age_group: z.string().max(100).optional(),
@@ -79,7 +78,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       article_number: initial?.article_number ?? "",
       name: initial?.name ?? "",
       model_name: initial?.model_name ?? "",
-      brand_id: initial?.brand_id ?? null,
       category_id: initial?.category_id ?? null,
       key_category: initial?.key_category ?? "",
       age_group: initial?.age_group ?? "",
@@ -100,10 +98,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
     },
   });
 
-  const { data: brands } = useQuery({
-    queryKey: ["brands-list"],
-    queryFn: async () => listBrandOptions(),
-  });
   const { data: categories } = useQuery({
     queryKey: ["categories-list"],
     queryFn: async () => listCategoryOptions(),
@@ -131,7 +125,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       const payload = {
         ...values,
         gender: values.gender || null,
-        brand_id: values.brand_id || null,
         category_id: values.category_id || null,
         article_number: values.article_number || values.barcode,
         model_name: values.model_name || values.name,
@@ -206,23 +199,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             </Field>
             <Field label="Model name">
               <Input {...register("model_name")} />
-            </Field>
-            <Field label="Brand">
-              <Select
-                value={watch("brand_id") ?? ""}
-                onValueChange={(v) => setValue("brand_id", v || null)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select brand" />
-                </SelectTrigger>
-                <SelectContent>
-                  {brands?.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </Field>
             <Field label="Category">
               <Select

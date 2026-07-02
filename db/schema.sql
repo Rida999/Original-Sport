@@ -21,34 +21,12 @@ CREATE TABLE IF NOT EXISTS categories (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS brands (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE,
-  description TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS suppliers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_name TEXT NOT NULL,
-  contact_person TEXT,
-  phone TEXT,
-  email TEXT,
-  address TEXT,
-  notes TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   barcode TEXT NOT NULL UNIQUE,
   article_number TEXT,
   name TEXT NOT NULL,
   model_name TEXT,
-  brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   key_category TEXT,
   age_group TEXT,
@@ -96,14 +74,6 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS categories_set_updated_at ON categories;
 CREATE TRIGGER categories_set_updated_at BEFORE UPDATE ON categories
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS brands_set_updated_at ON brands;
-CREATE TRIGGER brands_set_updated_at BEFORE UPDATE ON brands
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS suppliers_set_updated_at ON suppliers;
-CREATE TRIGGER suppliers_set_updated_at BEFORE UPDATE ON suppliers
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 DROP TRIGGER IF EXISTS products_set_updated_at ON products;

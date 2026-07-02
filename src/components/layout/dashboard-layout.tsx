@@ -4,12 +4,8 @@ import {
   LayoutDashboard,
   Package,
   Tags,
-  Boxes,
   Warehouse,
-  Truck,
   BarChart3,
-  Settings,
-  Package2,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,11 +16,8 @@ const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Products", icon: Package },
   { to: "/categories", label: "Categories", icon: Tags },
-  { to: "/brands", label: "Brands", icon: Boxes },
   { to: "/inventory", label: "Inventory", icon: Warehouse },
-  { to: "/suppliers", label: "Suppliers", icon: Truck },
   { to: "/reports", label: "Reports", icon: BarChart3 },
-  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
@@ -43,11 +36,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         )}
       >
         <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-          <div className="size-7 rounded-md bg-primary/15 grid place-items-center">
-            <Package2 className="size-4 text-primary" />
+          <div className="size-8 rounded-full border border-sidebar-border grid place-items-center shrink-0">
+            <span className="text-[10px] font-black tracking-tight text-sidebar-foreground">
+              OS
+            </span>
           </div>
-          <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-            SportsWear
+          <span className="text-sm tracking-tight text-sidebar-foreground leading-none">
+            <span className="font-black uppercase">Original</span>{" "}
+            <span className="italic font-light">Sport</span>
           </span>
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">

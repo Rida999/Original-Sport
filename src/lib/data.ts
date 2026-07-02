@@ -2,17 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { slugify } from "@/lib/format";
 
-export type CrudTable = "categories" | "brands";
+export type CrudTable = "categories";
 export type CrudRow = { id: string; name: string; slug: string; description: string | null };
-export type Supplier = {
-  id: string;
-  company_name: string;
-  contact_person: string | null;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-  notes: string | null;
-};
 export type ProductGender = "men" | "women" | "unisex" | "kids";
 export type ProductStatus = "available" | "out_of_stock" | "discontinued";
 export type ProductInput = {
@@ -21,7 +12,6 @@ export type ProductInput = {
   article_number?: string | null;
   name: string;
   model_name?: string | null;
-  brand_id?: string | null;
   category_id?: string | null;
   key_category?: string | null;
   age_group?: string | null;
@@ -47,18 +37,8 @@ export type Product = ProductInput & {
   id: string;
   created_at: string;
   updated_at: string;
-  brand?: { name: string } | null;
   category?: { name: string } | null;
 };
-export type SupplierInput = Omit<Supplier, "id">;
-
-const clean = <T extends Record<string, unknown>>(value: T) =>
-  Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      typeof item === "string" && item.trim() === "" ? null : item,
-    ]),
-  ) as T;
 
 export const listCrud = createServerFn({ method: "GET" })
   .validator((data: { table: CrudTable }) => data)
@@ -98,71 +78,17 @@ export const deleteCrud = createServerFn({ method: "POST" })
     await query(`delete from ${data.table} where id = $1`, [data.id]);
   });
 
-export const listSuppliers = createServerFn({ method: "GET" }).handler(async () => {
-  const { query } = await import("./db.server");
-  return query<Supplier>("select * from suppliers order by company_name");
-});
-
-export const saveSupplier = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; values: SupplierInput }) => data)
-  .handler(async ({ data }) => {
-    const { one } = await import("./db.server");
-    const values = clean(data.values);
-    if (data.id) {
-      await one(
-        `update suppliers
-         set company_name = $1, contact_person = $2, phone = $3, email = $4, address = $5, notes = $6
-         where id = $7 returning id`,
-        [
-          values.company_name,
-          values.contact_person,
-          values.phone,
-          values.email,
-          values.address,
-          values.notes,
-          data.id,
-        ],
-      );
-      return;
-    }
-    await one(
-      `insert into suppliers (company_name, contact_person, phone, email, address, notes)
-       values ($1, $2, $3, $4, $5, $6) returning id`,
-      [
-        values.company_name,
-        values.contact_person,
-        values.phone,
-        values.email,
-        values.address,
-        values.notes,
-      ],
-    );
-  });
-
-export const deleteSupplier = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
-  .handler(async ({ data }) => {
-    const { query } = await import("./db.server");
-    await query("delete from suppliers where id = $1", [data.id]);
-  });
-
-export const listBrandOptions = createServerFn({ method: "GET" }).handler(async () => {
-  const { query } = await import("./db.server");
-  return query<{ id: string; name: string }>("select id, name from brands order by name");
-});
-
 export const listCategoryOptions = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
   return query<{ id: string; name: string }>("select id, name from categories order by name");
 });
 
 const productColumns = `
-  p.id, p.barcode, p.article_number, p.name, p.model_name, p.brand_id, p.category_id,
+  p.id, p.barcode, p.article_number, p.name, p.model_name, p.category_id,
   p.key_category, p.age_group, p.gender, p.sport, p.marketing_line, p.product_division,
   p.product_line, p.product_type, p.sub_brand, p.color, p.size, p.purchase_price,
   p.selling_price, p.quantity, p.min_stock, p.description, p.images, p.source_thumbnail,
   p.status, p.created_at, p.updated_at,
-  case when b.id is null then null else json_build_object('name', b.name) end as brand,
   case when c.id is null then null else json_build_object('name', c.name) end as category
 `;
 
@@ -171,7 +97,6 @@ export const listProducts = createServerFn({ method: "GET" }).handler(async () =
   return query<Product>(
     `select ${productColumns}
      from products p
-     left join brands b on b.id = p.brand_id
      left join categories c on c.id = p.category_id
      order by p.created_at desc`,
   );
@@ -184,7 +109,6 @@ export const getProduct = createServerFn({ method: "GET" })
     return one<Product>(
       `select ${productColumns}
        from products p
-       left join brands b on b.id = p.brand_id
        left join categories c on c.id = p.category_id
        where p.id = $1`,
       [data.id],
@@ -196,7 +120,6 @@ const productValues = (product: ProductInput) => [
   product.article_number || product.barcode,
   product.name,
   product.model_name || product.name,
-  product.brand_id || null,
   product.category_id || null,
   product.key_category || null,
   product.age_group || null,
@@ -227,25 +150,25 @@ export const saveProduct = createServerFn({ method: "POST" })
     if (data.id) {
       await one(
         `update products set
-          barcode = $1, article_number = $2, name = $3, model_name = $4, brand_id = $5, category_id = $6,
-          key_category = $7, age_group = $8, gender = $9, sport = $10, marketing_line = $11,
-          product_division = $12, product_line = $13, product_type = $14, sub_brand = $15,
-          color = $16, size = $17, purchase_price = $18, selling_price = $19, quantity = $20,
-          min_stock = $21, description = $22, images = $23, source_thumbnail = $24, status = $25
-         where id = $26 returning id`,
+          barcode = $1, article_number = $2, name = $3, model_name = $4, category_id = $5,
+          key_category = $6, age_group = $7, gender = $8, sport = $9, marketing_line = $10,
+          product_division = $11, product_line = $12, product_type = $13, sub_brand = $14,
+          color = $15, size = $16, purchase_price = $17, selling_price = $18, quantity = $19,
+          min_stock = $20, description = $21, images = $22, source_thumbnail = $23, status = $24
+         where id = $25 returning id`,
         [...values, data.id],
       );
       return data.id;
     }
     const row = await one<{ id: string }>(
       `insert into products (
-        barcode, article_number, name, model_name, brand_id, category_id, key_category, age_group,
+        barcode, article_number, name, model_name, category_id, key_category, age_group,
         gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
         color, size, purchase_price, selling_price, quantity, min_stock, description, images,
         source_thumbnail, status
       ) values (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-        $18, $19, $20, $21, $22, $23, $24, $25
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24
       ) returning id`,
       values,
     );
@@ -264,52 +187,41 @@ export const deleteProducts = createServerFn({ method: "POST" })
   });
 
 export const importProducts = createServerFn({ method: "POST" })
-  .validator((data: { products: ProductInput[]; brands: string[]; categories: string[] }) => data)
+  .validator((data: { products: ProductInput[]; categories: string[] }) => data)
   .handler(async ({ data }) => {
     const { getPool } = await import("./db.server");
     const pool = getPool();
     const client = await pool.connect();
     try {
       await client.query("begin");
-      for (const name of data.brands) {
-        await client.query(
-          "insert into brands (name, slug) values ($1, $2) on conflict (slug) do update set name = excluded.name",
-          [name, slugify(name)],
-        );
-      }
       for (const name of data.categories) {
         await client.query(
           "insert into categories (name, slug) values ($1, $2) on conflict (slug) do update set name = excluded.name",
           [name, slugify(name)],
         );
       }
-      const brands = await client.query<{ id: string; slug: string }>(
-        "select id, slug from brands",
-      );
       const categories = await client.query<{ id: string; slug: string }>(
         "select id, slug from categories",
       );
-      const brandId = new Map(brands.rows.map((row) => [row.slug, row.id]));
       const categoryId = new Map(categories.rows.map((row) => [row.slug, row.id]));
       for (const product of data.products) {
         const withIds = {
           ...product,
-          brand_id: product.brand_id ? (brandId.get(product.brand_id) ?? null) : null,
           category_id: product.category_id ? (categoryId.get(product.category_id) ?? null) : null,
         };
         await client.query(
           `insert into products (
-            barcode, article_number, name, model_name, brand_id, category_id, key_category, age_group,
+            barcode, article_number, name, model_name, category_id, key_category, age_group,
             gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
             color, size, purchase_price, selling_price, quantity, min_stock, description, images,
             source_thumbnail, status
           ) values (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+            $17, $18, $19, $20, $21, $22, $23, $24
           )
           on conflict (barcode) do update set
             article_number = excluded.article_number, name = excluded.name, model_name = excluded.model_name,
-            brand_id = excluded.brand_id, category_id = excluded.category_id, key_category = excluded.key_category,
+            category_id = excluded.category_id, key_category = excluded.key_category,
             age_group = excluded.age_group, gender = excluded.gender, sport = excluded.sport,
             marketing_line = excluded.marketing_line, product_division = excluded.product_division,
             product_line = excluded.product_line, product_type = excluded.product_type, sub_brand = excluded.sub_brand,
@@ -331,10 +243,9 @@ export const importProducts = createServerFn({ method: "POST" })
 
 export const getDashboardStats = createServerFn({ method: "GET" }).handler(async () => {
   const { one, query } = await import("./db.server");
-  const [products, categories, brands, lowStock, outOfStock, recent, activity] = await Promise.all([
+  const [products, categories, lowStock, outOfStock, recent, activity] = await Promise.all([
     one<{ count: string }>("select count(*) from products"),
     one<{ count: string }>("select count(*) from categories"),
-    one<{ count: string }>("select count(*) from brands"),
     query<Pick<Product, "id" | "name" | "quantity" | "min_stock">>(
       "select id, name, quantity, min_stock from products where quantity <= 5 and quantity > 0 limit 5",
     ),
@@ -351,7 +262,6 @@ export const getDashboardStats = createServerFn({ method: "GET" }).handler(async
   return {
     totalProducts: Number(products?.count ?? 0),
     totalCategories: Number(categories?.count ?? 0),
-    totalBrands: Number(brands?.count ?? 0),
     lowStock,
     outOfStock,
     recent,

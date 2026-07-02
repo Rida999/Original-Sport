@@ -34,7 +34,7 @@ export function SimpleCrud({
   singular,
   plural,
 }: {
-  table: "categories" | "brands";
+  table: "categories";
   singular: string;
   plural: string;
 }) {

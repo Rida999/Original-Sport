@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardStats } from "@/lib/data";
 import { Card } from "@/components/ui/card";
-import { Package, Tags, Boxes, AlertTriangle, XCircle, Clock } from "lucide-react";
+import { Package, Tags, AlertTriangle, XCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -24,7 +24,6 @@ function Dashboard() {
       accent: "text-primary",
     },
     { label: "Categories", value: data?.totalCategories ?? 0, icon: Tags, accent: "text-primary" },
-    { label: "Brands", value: data?.totalBrands ?? 0, icon: Boxes, accent: "text-primary" },
     {
       label: "Low Stock",
       value: data?.lowStock.length ?? 0,
