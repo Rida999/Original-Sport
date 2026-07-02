@@ -39,6 +39,23 @@ export type Product = ProductInput & {
   updated_at: string;
   category?: { name: string } | null;
 };
+export type ImportBatch = {
+  id: string;
+  file_name: string;
+  item_count: number;
+  total_quantity: number;
+  undone_at: string | null;
+  created_at: string;
+};
+export type SoldProductReport = {
+  id: string;
+  barcode: string;
+  name: string;
+  quantity_sold: number;
+  selling_price: number;
+  total_sales: number;
+  last_sold_at: string;
+};
 
 export const listCrud = createServerFn({ method: "GET" })
   .validator((data: { table: CrudTable }) => data)
@@ -98,7 +115,19 @@ export const listProducts = createServerFn({ method: "GET" }).handler(async () =
     `select ${productColumns}
      from products p
      left join categories c on c.id = p.category_id
+     where p.quantity > 0
      order by p.created_at desc`,
+  );
+});
+
+export const listArchivedProducts = createServerFn({ method: "GET" }).handler(async () => {
+  const { query } = await import("./db.server");
+  return query<Product>(
+    `select ${productColumns}
+     from products p
+     left join categories c on c.id = p.category_id
+     where p.quantity = 0 and p.status = 'out_of_stock'
+     order by p.updated_at desc`,
   );
 });
 
@@ -187,13 +216,26 @@ export const deleteProducts = createServerFn({ method: "POST" })
   });
 
 export const importProducts = createServerFn({ method: "POST" })
-  .validator((data: { products: ProductInput[]; categories: string[] }) => data)
+  .validator((data: { products: ProductInput[]; categories: string[]; fileName?: string }) => data)
   .handler(async ({ data }) => {
     const { getPool } = await import("./db.server");
     const pool = getPool();
     const client = await pool.connect();
     try {
       await client.query("begin");
+      const totalQuantity = data.products.reduce(
+        (sum, product) => sum + Math.max(0, Number(product.quantity || 0)),
+        0,
+      );
+      const batch = await client.query<{ id: string }>(
+        `insert into import_batches (file_name, item_count, total_quantity)
+         values ($1, $2, $3)
+         returning id`,
+        [data.fileName?.trim() || "Imported file", data.products.length, totalQuantity],
+      );
+      const batchId = batch.rows[0]?.id;
+      if (!batchId) throw new Error("Could not create import history record.");
+
       for (const name of data.categories) {
         await client.query(
           "insert into categories (name, slug) values ($1, $2) on conflict (slug) do update set name = excluded.name",
@@ -209,7 +251,7 @@ export const importProducts = createServerFn({ method: "POST" })
           ...product,
           category_id: product.category_id ? (categoryId.get(product.category_id) ?? null) : null,
         };
-        await client.query(
+        const imported = await client.query<{ id: string; barcode: string; name: string }>(
           `insert into products (
             barcode, article_number, name, model_name, category_id, key_category, age_group,
             gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
@@ -232,12 +274,107 @@ export const importProducts = createServerFn({ method: "POST" })
               when products.quantity + excluded.quantity = 0 then 'out_of_stock'::product_status
               when products.status = 'discontinued' then products.status
               else 'available'::product_status
-            end`,
+            end
+          returning id, barcode, name`,
           productValues(withIds),
         );
+        const productRow = imported.rows[0];
+        if (productRow) {
+          await client.query(
+            `insert into import_items (
+              import_batch_id, product_id, barcode, product_name, quantity_added
+            ) values ($1, $2, $3, $4, $5)`,
+            [
+              batchId,
+              productRow.id,
+              productRow.barcode,
+              productRow.name,
+              Math.max(0, Number(product.quantity || 0)),
+            ],
+          );
+        }
       }
+      await client.query(
+        "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4)",
+        [
+          "imported",
+          "import_batch",
+          batchId,
+          { file_name: data.fileName?.trim() || "Imported file", item_count: data.products.length },
+        ],
+      );
       await client.query("commit");
-      return { count: data.products.length };
+      return { count: data.products.length, importBatchId: batchId };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+export const listImportBatches = createServerFn({ method: "GET" }).handler(async () => {
+  const { query } = await import("./db.server");
+  return query<ImportBatch>(
+    `select id, file_name, item_count, total_quantity, undone_at, created_at
+     from import_batches
+     where undone_at is null
+     order by created_at desc
+     limit 8`,
+  );
+});
+
+export const undoImportBatch = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const { getPool } = await import("./db.server");
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const batch = await client.query<ImportBatch>(
+        `select id, file_name, item_count, total_quantity, undone_at, created_at
+         from import_batches
+         where id = $1
+         for update`,
+        [data.id],
+      );
+      const importBatch = batch.rows[0];
+      if (!importBatch) throw new Error("Import batch not found.");
+      if (importBatch.undone_at) throw new Error("This import has already been undone.");
+
+      const items = await client.query<{ product_id: string | null; quantity_added: number }>(
+        "select product_id, quantity_added from import_items where import_batch_id = $1",
+        [data.id],
+      );
+
+      for (const item of items.rows) {
+        if (!item.product_id) continue;
+        await client.query(
+          `update products
+           set quantity = greatest(quantity - $1, 0),
+               status = case
+                 when status = 'discontinued' then status
+                 when greatest(quantity - $1, 0) > 0 then 'available'::product_status
+                 else status
+               end
+           where id = $2`,
+          [Number(item.quantity_added || 0), item.product_id],
+        );
+      }
+
+      await client.query(
+        "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4)",
+        [
+          "import_undone",
+          "import_batch",
+          data.id,
+          { file_name: importBatch.file_name, item_count: importBatch.item_count },
+        ],
+      );
+      await client.query("delete from import_batches where id = $1", [data.id]);
+      await client.query("commit");
+      return { count: items.rowCount ?? 0 };
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -277,7 +414,7 @@ export const getDashboardStats = createServerFn({ method: "GET" }).handler(async
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
   return query<Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock" | "updated_at">>(
-    "select id, barcode, name, quantity, min_stock, updated_at from products order by updated_at desc",
+    "select id, barcode, name, quantity, min_stock, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 
@@ -374,4 +511,28 @@ export const listReportProducts = createServerFn({ method: "GET" }).handler(asyn
       "id" | "name" | "barcode" | "quantity" | "min_stock" | "selling_price" | "purchase_price"
     >
   >("select id, name, barcode, quantity, min_stock, selling_price, purchase_price from products");
+});
+
+export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(async () => {
+  const { one, query } = await import("./db.server");
+  const total = await one<{ count: string }>(
+    "select count(*) from activity_logs where action = 'scanned_out'",
+  );
+  const products = await query<SoldProductReport>(
+    `select
+       p.id,
+       p.barcode,
+       p.name,
+       count(a.id)::int as quantity_sold,
+       p.selling_price,
+       (count(a.id) * p.selling_price)::numeric(12, 2) as total_sales,
+       max(a.created_at) as last_sold_at
+     from activity_logs a
+     join products p on p.id = a.entity_id
+     where a.action = 'scanned_out'
+     group by p.id, p.barcode, p.name, p.selling_price
+     order by quantity_sold desc, last_sold_at desc`,
+  );
+  const totalSales = products.reduce((sum, product) => sum + Number(product.total_sales), 0);
+  return { totalSold: Number(total?.count ?? 0), totalSales, products };
 });

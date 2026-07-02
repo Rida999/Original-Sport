@@ -145,11 +145,13 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       };
       return saveProduct({ data: { ...payload, id: initial?.id } });
     },
-    onSuccess: () => {
+    onSuccess: (_result, values) => {
       toast.success(initial?.id ? "Product updated" : "Product created");
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["archive"] });
+      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      navigate({ to: "/products" });
+      navigate({ to: values.quantity === 0 ? "/archive" : "/products" });
     },
     onError: (e: Error) => toast.error(e.message),
   });

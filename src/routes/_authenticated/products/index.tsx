@@ -4,7 +4,9 @@ import * as XLSX from "xlsx";
 import {
   deleteProducts,
   importProducts,
+  listImportBatches,
   listProducts,
+  undoImportBatch,
   type ProductGender,
   type ProductInput,
 } from "@/lib/data";
@@ -14,7 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Trash2, Pencil, FileUp } from "lucide-react";
+import { FileClock, FileUp, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useState, useMemo, useRef } from "react";
 import { money, slugify, stripBracketedNumber } from "@/lib/format";
 import { toast } from "sonner";
@@ -113,7 +115,9 @@ const extractEmbeddedImagesByRow = (workbook: WorkbookWithFiles) => {
   const imagesByRow = new Map<number, string>();
   if (!files) return imagesByRow;
 
-  const drawingPath = Object.keys(files).find((path) => path.match(/^xl\/drawings\/drawing\d+\.xml$/));
+  const drawingPath = Object.keys(files).find((path) =>
+    path.match(/^xl\/drawings\/drawing\d+\.xml$/),
+  );
   if (!drawingPath) return imagesByRow;
 
   const relsPath = drawingPath.replace("xl/drawings/", "xl/drawings/_rels/") + ".rels";
@@ -183,7 +187,10 @@ const extractEmbeddedImagesByRow = (workbook: WorkbookWithFiles) => {
     const bytes = bytesFromFileContent(files[mediaPath]?.content);
     if (bytes.length === 0) continue;
 
-    imagesByRow.set(rowNumber, `data:${mimeFromBytes(bytes, mediaPath)};base64,${bytesToBase64(bytes)}`);
+    imagesByRow.set(
+      rowNumber,
+      `data:${mimeFromBytes(bytes, mediaPath)};base64,${bytesToBase64(bytes)}`,
+    );
   }
 
   return imagesByRow;
@@ -198,6 +205,7 @@ function ProductsList() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUndoImport, setConfirmUndoImport] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -206,6 +214,10 @@ function ProductsList() {
   const { data, isLoading } = useQuery({
     queryKey: ["products"],
     queryFn: async () => listProducts(),
+  });
+  const { data: importBatches } = useQuery({
+    queryKey: ["import-batches"],
+    queryFn: async () => listImportBatches(),
   });
 
   const filtered = useMemo(() => {
@@ -288,13 +300,15 @@ function ProductsList() {
         };
       });
 
-      await importProducts({ data: { products, categories: categoryNames } });
+      await importProducts({ data: { products, categories: categoryNames, fileName: file.name } });
 
       toast.success(`Imported ${products.length} product(s)`);
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["archive"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["reports"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["import-batches"] });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -312,7 +326,24 @@ function ProductsList() {
       toast.success(`${selected.size} product(s) deleted`);
       setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["archive"] });
+      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const undoImport = useMutation({
+    mutationFn: async (id: string) => undoImportBatch({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Import undone");
+      setConfirmUndoImport(null);
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["archive"] });
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["import-batches"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -375,6 +406,60 @@ function ProductsList() {
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
+
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <FileClock className="size-4 text-muted-foreground" />
+          <h2 className="font-semibold text-sm">Import history</h2>
+        </div>
+        {(importBatches ?? []).length === 0 ? (
+          <div className="text-sm text-muted-foreground py-4">No imports yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">File</th>
+                  <th className="py-2 px-3 font-medium text-right">Products</th>
+                  <th className="py-2 px-3 font-medium text-right">Qty added</th>
+                  <th className="py-2 px-3 font-medium">Imported</th>
+                  <th className="py-2 pl-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {importBatches?.map((batch) => (
+                  <tr key={batch.id}>
+                    <td className="py-2 pr-3">
+                      <div className="font-medium">{batch.file_name}</div>
+                      {batch.undone_at && (
+                        <div className="text-xs text-muted-foreground">
+                          Undone {new Date(batch.undone_at).toLocaleString()}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">{batch.item_count}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{batch.total_quantity}</td>
+                    <td className="py-2 px-3 text-muted-foreground">
+                      {new Date(batch.created_at).toLocaleString()}
+                    </td>
+                    <td className="py-2 pl-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(batch.undone_at) || undoImport.isPending}
+                        onClick={() => setConfirmUndoImport(batch.id)}
+                      >
+                        <RotateCcw className="size-4 mr-1.5" />
+                        Undo
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -481,6 +566,30 @@ function ProductsList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => bulkDelete.mutate()}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(confirmUndoImport)}
+        onOpenChange={() => setConfirmUndoImport(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undo this import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will subtract the quantities added by this import and remove the import history
+              record completely.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmUndoImport) undoImport.mutate(confirmUndoImport);
+              }}
+            >
+              Undo import
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

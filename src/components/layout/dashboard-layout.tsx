@@ -1,13 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Package,
-  Tags,
-  Warehouse,
-  BarChart3,
-  Menu,
-} from "lucide-react";
+import { LayoutDashboard, Package, Archive, Tags, Warehouse, BarChart3, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -15,6 +8,7 @@ import { useState } from "react";
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Products", icon: Package },
+  { to: "/archive", label: "Archive", icon: Archive },
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/inventory", label: "Inventory", icon: Warehouse },
   { to: "/reports", label: "Reports", icon: BarChart3 },

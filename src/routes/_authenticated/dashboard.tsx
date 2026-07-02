@@ -45,7 +45,7 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">Overview of your inventory</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
             <div className="flex items-center justify-between">

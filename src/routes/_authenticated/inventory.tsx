@@ -51,7 +51,9 @@ function Inventory() {
       setScanCode("");
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["archive"] });
       qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       requestAnimationFrame(() => scanInputRef.current?.focus());
     },
