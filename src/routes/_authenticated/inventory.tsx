@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { listInventory } from "@/lib/data";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { adjustProductStockByBarcode, listInventory } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { RotateCcw, ScanLine, Search, ShoppingCart } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
@@ -14,6 +17,10 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function Inventory() {
   const [q, setQ] = useState("");
+  const [scanCode, setScanCode] = useState("");
+  const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
     queryFn: async () => listInventory(),
@@ -26,12 +33,97 @@ function Inventory() {
     [data, q],
   );
 
+  const adjustStock = useMutation({
+    mutationFn: async ({ barcode, mode }: { barcode: string; mode: "remove" | "return" }) =>
+      adjustProductStockByBarcode({ data: { barcode, mode } }),
+    onSuccess: (result) => {
+      if (result.status === "updated") {
+        const action = result.mode === "return" ? "Returned" : "Removed";
+        toast.success(
+          `${action} ${result.product.name}: ${result.product.previous_quantity} -> ${result.product.quantity}`,
+        );
+      } else if (result.status === "out_of_stock") {
+        toast.warning(`${result.product.name} is out of stock`);
+      } else {
+        toast.error(`No product found for ${result.barcode}`);
+      }
+
+      setScanCode("");
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      requestAnimationFrame(() => scanInputRef.current?.focus());
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleScan = () => {
+    const barcode = scanCode.trim();
+    if (!barcode || adjustStock.isPending) return;
+    adjustStock.mutate({ barcode, mode: scanMode });
+  };
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
         <p className="text-sm text-muted-foreground">Stock levels across all products</p>
       </div>
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="space-y-1.5">
+            <div className="text-sm font-medium">Action</div>
+            <ToggleGroup
+              type="single"
+              value={scanMode}
+              onValueChange={(value) => {
+                if (value === "remove" || value === "return") setScanMode(value);
+              }}
+              className="justify-start"
+            >
+              <ToggleGroupItem value="remove" aria-label="Remove one item">
+                <ShoppingCart className="size-4 mr-1.5" />
+                Remove
+              </ToggleGroupItem>
+              <ToggleGroupItem value="return" aria-label="Add one item">
+                <RotateCcw className="size-4 mr-1.5" />
+                Add
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <label htmlFor="stock-scan" className="text-sm font-medium">
+              Barcode
+            </label>
+            <div className="relative">
+              <ScanLine className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="stock-scan"
+                ref={scanInputRef}
+                className="pl-9 font-mono"
+                placeholder="Scan barcode"
+                value={scanCode}
+                autoComplete="off"
+                onChange={(e) => setScanCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleScan();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <Button
+            className="md:w-32"
+            disabled={!scanCode.trim() || adjustStock.isPending}
+            onClick={handleScan}
+          >
+            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Add" : "Remove"}
+          </Button>
+        </div>
+      </Card>
       <div className="relative max-w-md">
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
