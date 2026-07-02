@@ -225,9 +225,14 @@ export const importProducts = createServerFn({ method: "POST" })
             age_group = excluded.age_group, gender = excluded.gender, sport = excluded.sport,
             marketing_line = excluded.marketing_line, product_division = excluded.product_division,
             product_line = excluded.product_line, product_type = excluded.product_type, sub_brand = excluded.sub_brand,
-            purchase_price = excluded.purchase_price, selling_price = excluded.selling_price, quantity = excluded.quantity,
+            purchase_price = excluded.purchase_price, selling_price = excluded.selling_price,
+            quantity = products.quantity + excluded.quantity,
             min_stock = excluded.min_stock, images = excluded.images, source_thumbnail = excluded.source_thumbnail,
-            status = excluded.status`,
+            status = case
+              when products.quantity + excluded.quantity = 0 then 'out_of_stock'::product_status
+              when products.status = 'discontinued' then products.status
+              else 'available'::product_status
+            end`,
           productValues(withIds),
         );
       }
