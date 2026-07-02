@@ -36,7 +36,6 @@ function EditProduct() {
             article_number: data.article_number ?? undefined,
             name: data.name,
             model_name: data.model_name ?? undefined,
-            brand_id: data.brand_id,
             category_id: data.category_id,
             key_category: data.key_category ?? undefined,
             age_group: data.age_group ?? undefined,

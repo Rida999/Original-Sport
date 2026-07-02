@@ -76,8 +76,7 @@ function Reports() {
 
       <Card className="p-4">
         <p className="text-sm text-muted-foreground">
-          Additional report types (PDF export, sales reports, supplier reports) ship in the next
-          phase.
+          Additional report types (PDF export, sales reports) ship in the next phase.
         </p>
       </Card>
     </div>

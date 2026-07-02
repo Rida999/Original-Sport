@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Trash2, Pencil, FileUp } from "lucide-react";
 import { useState, useMemo, useRef } from "react";
-import { money, slugify } from "@/lib/format";
+import { money, slugify, stripBracketedNumber } from "@/lib/format";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -220,7 +220,6 @@ function ProductsList() {
         p.barcode,
         p.product_type,
         p.product_line,
-        p.brand?.name,
         p.category?.name,
       ]
         .filter(Boolean)
@@ -247,15 +246,15 @@ function ProductsList() {
           "No product rows found. Expected columns like Article Number, Model Name, Qty, and Retail/Unit.",
         );
 
-      const brandNames = unique(validRows.map((row) => cell(row, "Brand")));
-      const categoryNames = unique(validRows.map((row) => cell(row, "Product Type")));
+      const categoryNames = unique(
+        validRows.map((row) => stripBracketedNumber(cell(row, "Product Type"))),
+      );
 
       const products: ProductInput[] = validRows.map((row) => {
         const articleNumber = cell(row, "Article Number");
         const modelName = cell(row, "Model Name");
-        const brandName = cell(row, "Brand");
         const keyCategory = cell(row, "Key Category");
-        const productType = cell(row, "Product Type");
+        const productType = stripBracketedNumber(cell(row, "Product Type"));
         const quantity = Math.max(0, Math.round(numberCell(row, "Qty")));
         const sellingPrice = Math.max(0, numberCell(row, "Retail/Unit"));
         const ageGroup = cell(row, "Age Group");
@@ -269,7 +268,6 @@ function ProductsList() {
           article_number: articleNumber,
           name: modelName,
           model_name: modelName,
-          brand_id: brandName ? slugify(brandName) : null,
           category_id: productType ? slugify(productType) : null,
           key_category: keyCategory || null,
           age_group: ageGroup || null,
@@ -290,7 +288,7 @@ function ProductsList() {
         };
       });
 
-      await importProducts({ data: { products, brands: brandNames, categories: categoryNames } });
+      await importProducts({ data: { products, categories: categoryNames } });
 
       toast.success(`Imported ${products.length} product(s)`);
       qc.invalidateQueries({ queryKey: ["products"] });
@@ -372,7 +370,7 @@ function ProductsList() {
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
-          placeholder="Search by name, barcode, brand…"
+          placeholder="Search by name, barcode, category…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -391,7 +389,6 @@ function ProductsList() {
                 </th>
                 <th className="p-3 font-medium">Product</th>
                 <th className="p-3 font-medium">Barcode</th>
-                <th className="p-3 font-medium">Brand</th>
                 <th className="p-3 font-medium">Category</th>
                 <th className="p-3 font-medium">Gender</th>
                 <th className="p-3 font-medium text-right">Price</th>
@@ -404,14 +401,14 @@ function ProductsList() {
               {isLoading &&
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={10} className="p-3">
+                    <td colSpan={9} className="p-3">
                       <Skeleton className="h-8" />
                     </td>
                   </tr>
                 ))}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-10 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-10 text-center text-muted-foreground">
                     No products.{" "}
                     <Link to="/products/new" className="text-primary hover:underline">
                       Add your first
@@ -451,7 +448,6 @@ function ProductsList() {
                     <td className="p-3 font-mono text-xs text-muted-foreground">
                       {p.article_number ?? p.barcode}
                     </td>
-                    <td className="p-3">{p.brand?.name ?? "—"}</td>
                     <td className="p-3">{p.category?.name ?? "—"}</td>
                     <td className="p-3">{formatGender(p.gender)}</td>
                     <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
