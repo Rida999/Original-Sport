@@ -22,6 +22,35 @@ type StockAdjustment = {
   mutate: (variables: { barcode: string; mode: "remove" | "return" }) => void;
 };
 
+const CAMERA_ZOOM = 1.8;
+
+type ZoomTrackCapabilities = MediaTrackCapabilities & {
+  zoom?: { min?: number; max?: number };
+};
+
+type ZoomTrackConstraints = MediaTrackConstraintSet & {
+  zoom?: number;
+};
+
+const cameraConstraints = (deviceId?: string): MediaTrackConstraints =>
+  ({
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    advanced: [{ zoom: CAMERA_ZOOM } as ZoomTrackConstraints],
+  }) as MediaTrackConstraints;
+
+const applyCameraZoom = async (stream: MediaStream) => {
+  const [track] = stream.getVideoTracks();
+  if (!track) return;
+  const capabilities = track.getCapabilities?.() as ZoomTrackCapabilities | undefined;
+  const maxZoom = capabilities?.zoom?.max;
+  if (!maxZoom) return;
+  await track.applyConstraints({
+    advanced: [{ zoom: Math.min(CAMERA_ZOOM, maxZoom) } as ZoomTrackConstraints],
+  });
+};
+
 const textCodeFromOcr = (text: string) => {
   const cleaned = text
     .toUpperCase()
@@ -109,10 +138,13 @@ function Inventory() {
         if (!videoRef.current) return;
 
         if (cameraCodeType === "text") {
+          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+          const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
+            video: cameraConstraints(backCamera?.deviceId),
             audio: false,
           });
+          await applyCameraZoom(stream);
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           const { recognize } = await import("tesseract.js");
@@ -131,7 +163,21 @@ function Inventory() {
               canvas.height = video.videoHeight;
               const context = canvas.getContext("2d");
               if (!context) return;
-              context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const sourceWidth = video.videoWidth / CAMERA_ZOOM;
+              const sourceHeight = video.videoHeight / CAMERA_ZOOM;
+              const sourceX = (video.videoWidth - sourceWidth) / 2;
+              const sourceY = (video.videoHeight - sourceHeight) / 2;
+              context.drawImage(
+                video,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+              );
               const result = await recognize(canvas, "eng");
               const code = textCodeFromOcr(result.data.text);
               if (code && scanCooldownRef.current !== code) {
@@ -169,8 +215,8 @@ function Inventory() {
         const reader = new BrowserMultiFormatReader(hints);
         const devices = await BrowserMultiFormatReader.listVideoInputDevices();
         const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
-        controls = await reader.decodeFromVideoDevice(
-          backCamera?.deviceId,
+        controls = await reader.decodeFromConstraints(
+          { video: cameraConstraints(backCamera?.deviceId), audio: false },
           videoRef.current,
           (result, error) => {
             if (stopped) return;
@@ -188,6 +234,8 @@ function Inventory() {
             }
           },
         );
+        const controlsStream = videoRef.current.srcObject;
+        if (controlsStream instanceof MediaStream) await applyCameraZoom(controlsStream);
       } catch {
         setCameraError("Camera permission was blocked or no camera was found.");
         setCameraActive(false);
@@ -294,7 +342,12 @@ function Inventory() {
           <div className="mt-4 overflow-hidden rounded-md border bg-muted/20">
             {cameraActive ? (
               <div className="relative aspect-[4/3] max-h-[460px] bg-black">
-                <video ref={videoRef} className="size-full object-cover" playsInline muted />
+                <video
+                  ref={videoRef}
+                  className="size-full scale-[1.35] object-cover"
+                  playsInline
+                  muted
+                />
                 <div
                   className={
                     cameraCodeType === "text"
