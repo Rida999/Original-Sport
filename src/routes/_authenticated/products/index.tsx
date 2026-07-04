@@ -249,6 +249,10 @@ function ProductsList() {
         .some((v) => String(v).toLowerCase().includes(term)),
     );
   }, [data, q]);
+  const totalStock = useMemo(
+    () => (data ?? []).reduce((sum, product) => sum + Number(product.quantity || 0), 0),
+    [data],
+  );
 
   const handleImport = async (file: File | null) => {
     if (!file) return;
@@ -377,7 +381,9 @@ function ProductsList() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
-          <p className="text-sm text-muted-foreground">{data?.length ?? 0} total</p>
+          <p className="text-sm text-muted-foreground">
+            {totalStock} items in stock - {data?.length ?? 0} products
+          </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <input
