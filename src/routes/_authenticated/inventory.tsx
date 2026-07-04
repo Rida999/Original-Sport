@@ -37,6 +37,14 @@ type ReceiptLine = {
   unit_price: number;
 };
 
+type ReceiptDraft = {
+  items: ReceiptLine[];
+  cashPaid: string;
+  discountMode: "none" | "preset" | "custom";
+  discountPercent: number;
+  customDiscountPercent: string;
+};
+
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
   component: Inventory,
@@ -98,6 +106,41 @@ const textCodeFromOcr = (text: string) => {
 };
 
 const discountOptions = [15, 20, 25] as const;
+const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
+
+const readReceiptDraft = (): ReceiptDraft | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(RECEIPT_DRAFT_KEY);
+    if (!raw) return null;
+
+    const draft = JSON.parse(raw) as Partial<ReceiptDraft>;
+    const items = Array.isArray(draft.items)
+      ? draft.items.filter(
+          (item): item is ReceiptLine =>
+            typeof item.description === "string" &&
+            typeof item.quantity === "number" &&
+            typeof item.unit_price === "number",
+        )
+      : [];
+    const discountMode =
+      draft.discountMode === "preset" || draft.discountMode === "custom"
+        ? draft.discountMode
+        : "none";
+
+    return {
+      items,
+      cashPaid: typeof draft.cashPaid === "string" ? draft.cashPaid : "",
+      discountMode,
+      discountPercent: Number(draft.discountPercent) || 0,
+      customDiscountPercent:
+        typeof draft.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+    };
+  } catch {
+    return null;
+  }
+};
 
 function Inventory() {
   const [q, setQ] = useState("");
@@ -113,11 +156,19 @@ function Inventory() {
   const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
-  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
-  const [cashPaid, setCashPaid] = useState("");
-  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">("none");
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [customDiscountPercent, setCustomDiscountPercent] = useState("");
+  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
+    () => readReceiptDraft()?.items ?? [],
+  );
+  const [cashPaid, setCashPaid] = useState(() => readReceiptDraft()?.cashPaid ?? "");
+  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">(
+    () => readReceiptDraft()?.discountMode ?? "none",
+  );
+  const [discountPercent, setDiscountPercent] = useState(
+    () => readReceiptDraft()?.discountPercent ?? 0,
+  );
+  const [customDiscountPercent, setCustomDiscountPercent] = useState(
+    () => readReceiptDraft()?.customDiscountPercent ?? "",
+  );
   const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
@@ -153,6 +204,7 @@ function Inventory() {
 
   const resetReceipt = () => {
     setReceiptItems([]);
+    setCashPaid("");
     setDiscountMode("none");
     setDiscountPercent(0);
     setCustomDiscountPercent("");
@@ -237,7 +289,7 @@ function Inventory() {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
       window.open(`/print/receipt/${receipt.id}`, "_blank");
       resetReceipt();
-      setCashPaid("");
+      invalidateStockQueries();
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -268,6 +320,33 @@ function Inventory() {
       toast.success("Returned 1 item to inventory");
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const hasDraft =
+      receiptItems.length > 0 ||
+      cashPaid.trim().length > 0 ||
+      discountMode !== "none" ||
+      discountPercent > 0 ||
+      customDiscountPercent.trim().length > 0;
+
+    if (!hasDraft) {
+      window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      RECEIPT_DRAFT_KEY,
+      JSON.stringify({
+        items: receiptItems,
+        cashPaid,
+        discountMode,
+        discountPercent,
+        customDiscountPercent,
+      } satisfies ReceiptDraft),
+    );
+  }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
