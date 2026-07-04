@@ -9,6 +9,8 @@ lerna-debug.log*
 .env
 .env.local
 .npm-cache/
+.local_pg_data/
+.local_pg/
 
 node_modules
 dist

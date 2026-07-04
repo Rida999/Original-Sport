@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type TouchEvent,
+  type TouchList as ReactTouchList,
+} from "react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -35,7 +42,7 @@ type ZoomTrackConstraints = MediaTrackConstraintSet & {
 const clampCameraZoom = (zoom: number) =>
   Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
 
-const touchDistance = (touches: TouchList) => {
+const touchDistance = (touches: ReactTouchList) => {
   const first = touches.item(0);
   const second = touches.item(1);
   if (!first || !second) return 0;
