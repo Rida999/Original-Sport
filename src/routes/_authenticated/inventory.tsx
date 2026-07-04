@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Camera,
+  ChevronDown,
   Printer,
   RotateCcw,
   ScanLine,
@@ -34,6 +35,14 @@ type ReceiptLine = {
   description: string;
   quantity: number;
   unit_price: number;
+};
+
+type ReceiptDraft = {
+  items: ReceiptLine[];
+  cashPaid: string;
+  discountMode: "none" | "preset" | "custom";
+  discountPercent: number;
+  customDiscountPercent: string;
 };
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -97,6 +106,41 @@ const textCodeFromOcr = (text: string) => {
 };
 
 const discountOptions = [15, 20, 25] as const;
+const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
+
+const readReceiptDraft = (): ReceiptDraft | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(RECEIPT_DRAFT_KEY);
+    if (!raw) return null;
+
+    const draft = JSON.parse(raw) as Partial<ReceiptDraft>;
+    const items = Array.isArray(draft.items)
+      ? draft.items.filter(
+          (item): item is ReceiptLine =>
+            typeof item.description === "string" &&
+            typeof item.quantity === "number" &&
+            typeof item.unit_price === "number",
+        )
+      : [];
+    const discountMode =
+      draft.discountMode === "preset" || draft.discountMode === "custom"
+        ? draft.discountMode
+        : "none";
+
+    return {
+      items,
+      cashPaid: typeof draft.cashPaid === "string" ? draft.cashPaid : "",
+      discountMode,
+      discountPercent: Number(draft.discountPercent) || 0,
+      customDiscountPercent:
+        typeof draft.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+    };
+  } catch {
+    return null;
+  }
+};
 
 function Inventory() {
   const [q, setQ] = useState("");
@@ -112,11 +156,20 @@ function Inventory() {
   const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
-  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
-  const [cashPaid, setCashPaid] = useState("");
-  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">("none");
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [customDiscountPercent, setCustomDiscountPercent] = useState("");
+  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
+    () => readReceiptDraft()?.items ?? [],
+  );
+  const [cashPaid, setCashPaid] = useState(() => readReceiptDraft()?.cashPaid ?? "");
+  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">(
+    () => readReceiptDraft()?.discountMode ?? "none",
+  );
+  const [discountPercent, setDiscountPercent] = useState(
+    () => readReceiptDraft()?.discountPercent ?? 0,
+  );
+  const [customDiscountPercent, setCustomDiscountPercent] = useState(
+    () => readReceiptDraft()?.customDiscountPercent ?? "",
+  );
+  const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
@@ -129,7 +182,11 @@ function Inventory() {
   const filtered = useMemo(
     () =>
       (data ?? []).filter(
-        (p) => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.barcode.includes(q),
+        (p) =>
+          !q ||
+          p.name.toLowerCase().includes(q.toLowerCase()) ||
+          p.barcode.includes(q) ||
+          p.article_number?.includes(q),
       ),
     [data, q],
   );
@@ -147,6 +204,7 @@ function Inventory() {
 
   const resetReceipt = () => {
     setReceiptItems([]);
+    setCashPaid("");
     setDiscountMode("none");
     setDiscountPercent(0);
     setCustomDiscountPercent("");
@@ -231,7 +289,7 @@ function Inventory() {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
       window.open(`/print/receipt/${receipt.id}`, "_blank");
       resetReceipt();
-      setCashPaid("");
+      invalidateStockQueries();
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -262,6 +320,33 @@ function Inventory() {
       toast.success("Returned 1 item to inventory");
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const hasDraft =
+      receiptItems.length > 0 ||
+      cashPaid.trim().length > 0 ||
+      discountMode !== "none" ||
+      discountPercent > 0 ||
+      customDiscountPercent.trim().length > 0;
+
+    if (!hasDraft) {
+      window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      RECEIPT_DRAFT_KEY,
+      JSON.stringify({
+        items: receiptItems,
+        cashPaid,
+        discountMode,
+        discountPercent,
+        customDiscountPercent,
+      } satisfies ReceiptDraft),
+    );
+  }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -417,7 +502,7 @@ function Inventory() {
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
             <label htmlFor="stock-scan" className="text-sm font-medium">
-              Code
+              Article number
             </label>
             <div className="relative">
               <ScanLine className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -648,29 +733,49 @@ function Inventory() {
 
       {recentReceipts && recentReceipts.length > 0 && (
         <Card className="p-4 space-y-2">
-          <div className="text-sm font-medium">Recent receipts</div>
-          <div className="divide-y divide-border">
-            {recentReceipts.map((receipt) => (
-              <div key={receipt.id} className="flex items-center justify-between py-2 text-sm">
-                <div>
-                  <span className="font-medium">#{receipt.invoice_number}</span>{" "}
-                  <span className="text-muted-foreground">
-                    {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
-                    {new Date(receipt.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
-                >
-                  <Printer className="size-4 mr-1.5" />
-                  Print
-                </Button>
-              </div>
-            ))}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Recent receipts</div>
+              <p className="text-xs text-muted-foreground">
+                {recentReceipts.length} saved receipt(s)
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setRecentReceiptsOpen((open) => !open)}
+            >
+              <ChevronDown
+                className={`size-4 transition-transform ${recentReceiptsOpen ? "rotate-180" : ""}`}
+              />
+              {recentReceiptsOpen ? "Hide" : "Show"}
+            </Button>
           </div>
+          {recentReceiptsOpen && (
+            <div className="divide-y divide-border">
+              {recentReceipts.map((receipt) => (
+                <div key={receipt.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium">#{receipt.invoice_number}</span>{" "}
+                    <span className="text-muted-foreground">
+                      {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
+                      {new Date(receipt.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
+                  >
+                    <Printer className="size-4 mr-1.5" />
+                    Print
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
@@ -691,7 +796,7 @@ function Inventory() {
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr className="text-left">
-                  <th className="p-3 font-medium">Barcode</th>
+                  <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
                   <th className="p-3 font-medium text-right">Current</th>
                   <th className="p-3 font-medium text-right">Minimum</th>
@@ -718,7 +823,9 @@ function Inventory() {
                           };
                   return (
                     <tr key={p.id} className="hover:bg-muted/30">
-                      <td className="p-3 font-mono text-xs text-muted-foreground">{p.barcode}</td>
+                      <td className="p-3 font-mono text-xs text-muted-foreground">
+                        {p.article_number ?? p.barcode}
+                      </td>
                       <td className="p-3 font-medium">{p.name}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
                       <td className="p-3 text-right tabular-nums text-muted-foreground">

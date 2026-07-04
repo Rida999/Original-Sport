@@ -67,7 +67,7 @@ function ArchivePage() {
             <thead className="bg-muted/40 text-muted-foreground">
               <tr className="text-left">
                 <th className="p-3 font-medium">Product</th>
-                <th className="p-3 font-medium">Barcode</th>
+                <th className="p-3 font-medium">Article number</th>
                 <th className="p-3 font-medium">Category</th>
                 <th className="p-3 font-medium">Gender</th>
                 <th className="p-3 font-medium text-right">Price</th>

@@ -4,6 +4,7 @@ import { money } from "@/lib/format";
 export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
   const createdAt = new Date(receipt.created_at);
   const totalQuantity = receipt.items.reduce((sum, item) => sum + item.quantity, 0);
+  const showCashSummary = receipt.cash_paid > 0;
 
   return (
     <div
@@ -87,16 +88,20 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
         <span>{money(receipt.total)}</span>
       </div>
 
-      <div className="my-2 border-t border-dashed border-black" />
+      {showCashSummary && (
+        <>
+          <div className="my-2 border-t border-dashed border-black" />
 
-      <div className="flex justify-between font-semibold">
-        <span>Paid USD</span>
-        <span>{receipt.cash_paid.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between font-semibold">
-        <span>Change USD</span>
-        <span>{receipt.cash_exchange.toFixed(2)}</span>
-      </div>
+          <div className="flex justify-between font-semibold">
+            <span>Paid USD</span>
+            <span>{receipt.cash_paid.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-semibold">
+            <span>Change USD</span>
+            <span>{receipt.cash_exchange.toFixed(2)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

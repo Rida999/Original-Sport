@@ -23,9 +23,16 @@ function Reports() {
 
   const exportCsv = () => {
     if (!data) return;
-    const headers = ["Barcode", "Name", "Quantity", "Min stock", "Purchase price", "Selling price"];
+    const headers = [
+      "Article number",
+      "Name",
+      "Quantity",
+      "Min stock",
+      "Purchase price",
+      "Selling price",
+    ];
     const rows = data.map((p) => [
-      p.barcode,
+      p.article_number ?? p.barcode,
       p.name,
       p.quantity,
       p.min_stock,
@@ -112,7 +119,7 @@ function Reports() {
               <thead className="text-left text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-medium">Product</th>
-                  <th className="py-2 px-3 font-medium">Barcode</th>
+                  <th className="py-2 px-3 font-medium">Article number</th>
                   <th className="py-2 px-3 font-medium text-right">Sold</th>
                   <th className="py-2 px-3 font-medium text-right">Unit price</th>
                   <th className="py-2 px-3 font-medium text-right">Total</th>
@@ -124,7 +131,7 @@ function Reports() {
                   <tr key={product.id}>
                     <td className="py-2 pr-3 font-medium">{product.name}</td>
                     <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
-                      {product.barcode}
+                      {product.article_number ?? product.barcode}
                     </td>
                     <td className="py-2 px-3 text-right tabular-nums">{product.quantity_sold}</td>
                     <td className="py-2 px-3 text-right tabular-nums">

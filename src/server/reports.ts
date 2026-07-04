@@ -5,6 +5,7 @@ import type { Product } from "./products";
 export type SoldProductReport = {
   id: string;
   barcode: string;
+  article_number: string | null;
   name: string;
   quantity_sold: number;
   selling_price: number;
@@ -17,9 +18,18 @@ export const listReportProducts = createServerFn({ method: "GET" }).handler(asyn
   return query<
     Pick<
       Product,
-      "id" | "name" | "barcode" | "quantity" | "min_stock" | "selling_price" | "purchase_price"
+      | "id"
+      | "name"
+      | "barcode"
+      | "article_number"
+      | "quantity"
+      | "min_stock"
+      | "selling_price"
+      | "purchase_price"
     >
-  >("select id, name, barcode, quantity, min_stock, selling_price, purchase_price from products");
+  >(
+    "select id, name, barcode, article_number, quantity, min_stock, selling_price, purchase_price from products",
+  );
 });
 
 export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(async () => {
@@ -31,6 +41,7 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
     `select
        p.id,
        p.barcode,
+       p.article_number,
        p.name,
        count(a.id)::int as quantity_sold,
        p.selling_price,
@@ -39,7 +50,7 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
      from activity_logs a
      join products p on p.id = a.entity_id
      where a.action = 'scanned_out'
-     group by p.id, p.barcode, p.name, p.selling_price
+     group by p.id, p.barcode, p.article_number, p.name, p.selling_price
      order by quantity_sold desc, last_sold_at desc`,
   );
   const totalSales = products.reduce((sum, product) => sum + Number(product.total_sales), 0);

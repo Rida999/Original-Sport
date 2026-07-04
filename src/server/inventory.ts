@@ -4,8 +4,13 @@ import type { Product } from "./products";
 
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
-  return query<Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock" | "updated_at">>(
-    "select id, barcode, name, quantity, min_stock, updated_at from products where quantity > 0 order by updated_at desc",
+  return query<
+    Pick<
+      Product,
+      "id" | "barcode" | "article_number" | "name" | "quantity" | "min_stock" | "updated_at"
+    >
+  >(
+    "select id, barcode, article_number, name, quantity, min_stock, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 
@@ -13,7 +18,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
   .validator((data: { barcode: string; mode: "remove" | "return" }) => data)
   .handler(async ({ data }) => {
     const barcode = data.barcode.trim();
-    if (!barcode) throw new Error("Barcode is required.");
+    if (!barcode) throw new Error("Article number is required.");
 
     const { one } = await import("./db.server");
     if (data.mode === "return") {

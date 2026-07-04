@@ -168,7 +168,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         <Card className="p-5 md:col-span-2 space-y-4">
           <h2 className="font-semibold">Basics</h2>
           <div className="space-y-1.5">
-            <Label htmlFor="barcode">Barcode</Label>
+            <Label htmlFor="barcode">Article number</Label>
             <div className="flex gap-2">
               <Input
                 id="barcode"
@@ -178,7 +178,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
                   register("barcode").ref(el);
                   barcodeRef.current = el;
                 }}
-                placeholder="Scan or type…"
+                placeholder="Scan or type article number..."
               />
               <Button
                 type="button"
@@ -193,7 +193,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             </div>
             {errors.barcode && <p className="text-xs text-destructive">{errors.barcode.message}</p>}
             <p className="text-xs text-muted-foreground">
-              USB barcode scanners auto-fill this field when focused.
+              Scanners auto-fill this field when focused.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -202,7 +202,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <Field label="Article number">
+            <Field label="Secondary article number">
               <Input {...register("article_number")} />
             </Field>
             <Field label="Model name">
