@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listArchivedProducts, type ProductGender } from "@/lib/data";
+import { listArchivedProducts, type ProductGender } from "@/server/products";
 import { money } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/archive")({

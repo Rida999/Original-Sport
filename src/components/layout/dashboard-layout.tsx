@@ -1,6 +1,15 @@
 import { type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Package, Archive, Tags, Warehouse, BarChart3, Menu } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Archive,
+  Tags,
+  Warehouse,
+  BarChart3,
+  Receipt,
+  Menu,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -11,6 +20,7 @@ const nav = [
   { to: "/archive", label: "Archive", icon: Archive },
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/inventory", label: "Inventory", icon: Warehouse },
+  { to: "/receipts", label: "Receipts", icon: Receipt },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ] as const;
 

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboardStats } from "@/lib/data";
+import { getDashboardStats } from "@/server/dashboard";
 import { Card } from "@/components/ui/card";
 import { Package, Tags, AlertTriangle, XCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";

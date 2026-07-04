@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { getProduct } from "@/lib/data";
+import { getProduct } from "@/server/products";
 import { ProductForm } from "@/components/products/product-form";
 import { ChevronLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
