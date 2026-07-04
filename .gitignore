@@ -6,16 +6,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.env
+.env.local
 .npm-cache/
-.local_pg/
-.local_pg_data/
 
 node_modules
-.env
 dist
 dist-ssr
 .output
 .vinxi
+.vercel
 .tanstack/**
 .nitro
 *.local
