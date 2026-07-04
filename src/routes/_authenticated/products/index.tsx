@@ -16,7 +16,17 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileClock, FileUp, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  ChevronDown,
+  FileClock,
+  FileUp,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useState, useMemo, useRef } from "react";
 import { money, slugify, stripBracketedNumber } from "@/lib/format";
 import { toast } from "sonner";
@@ -207,6 +217,7 @@ function ProductsList() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUndoImport, setConfirmUndoImport] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -413,59 +424,78 @@ function ProductsList() {
         />
       </div>
 
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <FileClock className="size-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">Import history</h2>
-        </div>
-        {(importBatches ?? []).length === 0 ? (
-          <div className="text-sm text-muted-foreground py-4">No imports yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">File</th>
-                  <th className="py-2 px-3 font-medium text-right">Products</th>
-                  <th className="py-2 px-3 font-medium text-right">Qty added</th>
-                  <th className="py-2 px-3 font-medium">Imported</th>
-                  <th className="py-2 pl-3 font-medium text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {importBatches?.map((batch) => (
-                  <tr key={batch.id}>
-                    <td className="py-2 pr-3">
-                      <div className="font-medium">{batch.file_name}</div>
-                      {batch.undone_at && (
-                        <div className="text-xs text-muted-foreground">
-                          Undone {new Date(batch.undone_at).toLocaleString()}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 text-right tabular-nums">{batch.item_count}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{batch.total_quantity}</td>
-                    <td className="py-2 px-3 text-muted-foreground">
-                      {new Date(batch.created_at).toLocaleString()}
-                    </td>
-                    <td className="py-2 pl-3 text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={Boolean(batch.undone_at) || undoImport.isPending}
-                        onClick={() => setConfirmUndoImport(batch.id)}
-                      >
-                        <RotateCcw className="size-4 mr-1.5" />
-                        Undo
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Collapsible open={importHistoryOpen} onOpenChange={setImportHistoryOpen}>
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <FileClock className="size-4 text-muted-foreground" />
+              <h2 className="font-semibold text-sm">Import history</h2>
+              <Badge variant="outline">{importBatches?.length ?? 0}</Badge>
+            </div>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                {importHistoryOpen ? "Hide" : "Show"}
+                <ChevronDown
+                  className={`size-4 transition-transform ${importHistoryOpen ? "rotate-180" : ""}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
           </div>
-        )}
-      </Card>
+          <CollapsibleContent>
+            <div className="mt-3 border-t pt-3">
+              {(importBatches ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4">No imports yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead className="text-left text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">File</th>
+                        <th className="py-2 px-3 font-medium text-right">Products</th>
+                        <th className="py-2 px-3 font-medium text-right">Qty added</th>
+                        <th className="py-2 px-3 font-medium">Imported</th>
+                        <th className="py-2 pl-3 font-medium text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {importBatches?.map((batch) => (
+                        <tr key={batch.id}>
+                          <td className="py-2 pr-3">
+                            <div className="font-medium">{batch.file_name}</div>
+                            {batch.undone_at && (
+                              <div className="text-xs text-muted-foreground">
+                                Undone {new Date(batch.undone_at).toLocaleString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums">{batch.item_count}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">
+                            {batch.total_quantity}
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground">
+                            {new Date(batch.created_at).toLocaleString()}
+                          </td>
+                          <td className="py-2 pl-3 text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={Boolean(batch.undone_at) || undoImport.isPending}
+                              onClick={() => setConfirmUndoImport(batch.id)}
+                            >
+                              <RotateCcw className="size-4 mr-1.5" />
+                              Undo
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
