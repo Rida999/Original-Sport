@@ -363,12 +363,12 @@ function ProductsList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
           <p className="text-sm text-muted-foreground">{data?.length ?? 0} total</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <input
             ref={importRef}
             type="file"
@@ -379,17 +379,23 @@ function ProductsList() {
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             disabled={importing}
             onClick={() => importRef.current?.click()}
           >
             <FileUp className="size-4 mr-1.5" /> {importing ? "Importing..." : "Import Excel/XML"}
           </Button>
           {selected.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => setConfirmDelete(true)}
+            >
               <Trash2 className="size-4 mr-1.5" /> Delete ({selected.size})
             </Button>
           )}
-          <Button asChild size="sm">
+          <Button asChild size="sm" className="w-full sm:w-auto">
             <Link to="/products/new">
               <Plus className="size-4 mr-1.5" /> Add product
             </Link>
@@ -397,7 +403,7 @@ function ProductsList() {
         </div>
       </div>
 
-      <div className="relative max-w-md">
+      <div className="relative w-full sm:max-w-md">
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"

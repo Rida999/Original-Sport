@@ -93,14 +93,14 @@ export function SimpleCrud({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{plural}</h1>
           <p className="text-sm text-muted-foreground">{data?.length ?? 0} total</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" onClick={openNew}>
+            <Button size="sm" className="w-full sm:w-auto" onClick={openNew}>
               <Plus className="size-4 mr-1.5" /> Add {singular.toLowerCase()}
             </Button>
           </DialogTrigger>
@@ -137,51 +137,53 @@ export function SimpleCrud({
       </div>
 
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground">
-            <tr className="text-left">
-              <th className="p-3 font-medium">Name</th>
-              <th className="p-3 font-medium">Slug</th>
-              <th className="p-3 font-medium">Description</th>
-              <th className="p-3 w-24"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {isLoading && (
-              <tr>
-                <td colSpan={4} className="p-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr className="text-left">
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Slug</th>
+                <th className="p-3 font-medium">Description</th>
+                <th className="p-3 pr-4 w-28"></th>
               </tr>
-            )}
-            {!isLoading && data?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="p-10 text-center text-muted-foreground">
-                  No {plural.toLowerCase()} yet.
-                </td>
-              </tr>
-            )}
-            {data?.map((r) => (
-              <tr key={r.id} className="hover:bg-muted/30">
-                <td className="p-3 font-medium">{r.name}</td>
-                <td className="p-3 font-mono text-xs text-muted-foreground">{r.slug}</td>
-                <td className="p-3 text-muted-foreground truncate max-w-md">
-                  {r.description ?? "—"}
-                </td>
-                <td className="p-3">
-                  <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(r)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={() => setDelId(r.id)}>
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isLoading && (
+                <tr>
+                  <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!isLoading && data?.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-10 text-center text-muted-foreground">
+                    No {plural.toLowerCase()} yet.
+                  </td>
+                </tr>
+              )}
+              {data?.map((r) => (
+                <tr key={r.id} className="hover:bg-muted/30">
+                  <td className="p-3 font-medium">{r.name}</td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">{r.slug}</td>
+                  <td className="p-3 text-muted-foreground truncate max-w-md">
+                    {r.description ?? "—"}
+                  </td>
+                  <td className="p-3 pr-4">
+                    <div className="flex gap-2 justify-end">
+                      <Button size="icon" variant="ghost" onClick={() => openEdit(r)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => setDelId(r.id)}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <AlertDialog open={!!delId} onOpenChange={(v) => !v && setDelId(null)}>

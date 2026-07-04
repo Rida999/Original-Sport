@@ -82,8 +82,13 @@ CREATE TABLE IF NOT EXISTS import_items (
   barcode TEXT NOT NULL,
   product_name TEXT NOT NULL,
   quantity_added INTEGER NOT NULL DEFAULT 0,
+  previous_quantity INTEGER,
+  previous_status product_status,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS previous_quantity INTEGER;
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS previous_status product_status;
 
 CREATE INDEX IF NOT EXISTS import_items_batch_id_idx ON import_items(import_batch_id);
 

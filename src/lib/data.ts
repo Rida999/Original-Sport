@@ -251,6 +251,11 @@ export const importProducts = createServerFn({ method: "POST" })
           ...product,
           category_id: product.category_id ? (categoryId.get(product.category_id) ?? null) : null,
         };
+        const previous = await client.query<{
+          quantity: number;
+          status: ProductStatus;
+        }>("select quantity, status from products where barcode = $1", [withIds.barcode]);
+        const previousProduct = previous.rows[0] ?? null;
         const imported = await client.query<{ id: string; barcode: string; name: string }>(
           `insert into products (
             barcode, article_number, name, model_name, category_id, key_category, age_group,
@@ -282,14 +287,17 @@ export const importProducts = createServerFn({ method: "POST" })
         if (productRow) {
           await client.query(
             `insert into import_items (
-              import_batch_id, product_id, barcode, product_name, quantity_added
-            ) values ($1, $2, $3, $4, $5)`,
+              import_batch_id, product_id, barcode, product_name, quantity_added,
+              previous_quantity, previous_status
+            ) values ($1, $2, $3, $4, $5, $6, $7)`,
             [
               batchId,
               productRow.id,
               productRow.barcode,
               productRow.name,
               Math.max(0, Number(product.quantity || 0)),
+              previousProduct?.quantity ?? null,
+              previousProduct?.status ?? null,
             ],
           );
         }
@@ -343,23 +351,49 @@ export const undoImportBatch = createServerFn({ method: "POST" })
       if (!importBatch) throw new Error("Import batch not found.");
       if (importBatch.undone_at) throw new Error("This import has already been undone.");
 
-      const items = await client.query<{ product_id: string | null; quantity_added: number }>(
-        "select product_id, quantity_added from import_items where import_batch_id = $1",
+      const items = await client.query<{
+        product_id: string | null;
+        quantity_added: number;
+        previous_quantity: number | null;
+        previous_status: ProductStatus | null;
+      }>(
+        `select product_id, quantity_added, previous_quantity, previous_status
+         from import_items
+         where import_batch_id = $1`,
         [data.id],
       );
 
+      let deletedProducts = 0;
       for (const item of items.rows) {
         if (!item.product_id) continue;
+        const product = await client.query<{ quantity: number; status: ProductStatus }>(
+          "select quantity, status from products where id = $1 for update",
+          [item.product_id],
+        );
+        const current = product.rows[0];
+        if (!current) continue;
+
+        const nextQuantity =
+          item.previous_quantity === null
+            ? Math.max(Number(current.quantity || 0) - Number(item.quantity_added || 0), 0)
+            : Number(item.previous_quantity || 0);
+
+        if (item.previous_quantity === null && nextQuantity === 0) {
+          await client.query("delete from products where id = $1", [item.product_id]);
+          deletedProducts += 1;
+          continue;
+        }
+
         await client.query(
           `update products
-           set quantity = greatest(quantity - $1, 0),
+           set quantity = $1,
                status = case
                  when status = 'discontinued' then status
-                 when greatest(quantity - $1, 0) > 0 then 'available'::product_status
-                 else status
+                 when $1 = 0 then coalesce($2::product_status, status)
+                 else 'available'::product_status
                end
-           where id = $2`,
-          [Number(item.quantity_added || 0), item.product_id],
+           where id = $3`,
+          [nextQuantity, item.previous_status, item.product_id],
         );
       }
 
@@ -369,7 +403,11 @@ export const undoImportBatch = createServerFn({ method: "POST" })
           "import_undone",
           "import_batch",
           data.id,
-          { file_name: importBatch.file_name, item_count: importBatch.item_count },
+          {
+            file_name: importBatch.file_name,
+            item_count: importBatch.item_count,
+            deleted_products: deletedProducts,
+          },
         ],
       );
       await client.query("delete from import_batches where id = $1", [data.id]);
