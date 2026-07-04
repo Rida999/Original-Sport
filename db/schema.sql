@@ -92,6 +92,35 @@ ALTER TABLE import_items ADD COLUMN IF NOT EXISTS previous_status product_status
 
 CREATE INDEX IF NOT EXISTS import_items_batch_id_idx ON import_items(import_batch_id);
 
+CREATE SEQUENCE IF NOT EXISTS receipt_invoice_number_seq START 1;
+
+CREATE TABLE IF NOT EXISTS receipts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_number INTEGER NOT NULL DEFAULT nextval('receipt_invoice_number_seq') UNIQUE,
+  customer_name TEXT,
+  subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  discount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  vat_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
+  vat_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  cash_paid NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  cash_exchange NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS receipt_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  receipt_id UUID NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  description TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  unit_price NUMERIC(12, 2) NOT NULL,
+  total NUMERIC(12, 2) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS receipt_items_receipt_id_idx ON receipt_items(receipt_id);
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

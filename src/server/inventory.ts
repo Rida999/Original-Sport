@@ -52,7 +52,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
     }
 
     const updated = await one<
-      Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock"> & {
+      Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock" | "selling_price"> & {
         previous_quantity: number;
       }
     >(
@@ -64,7 +64,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
              else status
            end
        where (barcode = $1 or article_number = $1) and quantity > 0
-       returning id, barcode, name, quantity + 1 as previous_quantity, quantity, min_stock`,
+       returning id, barcode, name, quantity + 1 as previous_quantity, quantity, min_stock, selling_price`,
       [barcode],
     );
 

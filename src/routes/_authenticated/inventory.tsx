@@ -1,12 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adjustProductStockByBarcode, listInventory } from "@/server/inventory";
+import {
+  createReceipt,
+  getReceipt,
+  listRecentReceipts,
+  type ReceiptWithItems,
+} from "@/server/receipts";
+import { ReceiptPrintView } from "@/components/inventory/receipt-print-view";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-react";
+import {
+  Camera,
+  Printer,
+  RotateCcw,
+  ScanLine,
+  Search,
+  ShoppingCart,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -16,6 +33,14 @@ import {
   type TouchList as ReactTouchList,
 } from "react";
 import { toast } from "sonner";
+import { money } from "@/lib/format";
+
+type ReceiptLine = {
+  product_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+};
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
@@ -91,10 +116,18 @@ function Inventory() {
   const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
+  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [cashPaid, setCashPaid] = useState("");
+  const [printReceipt, setPrintReceipt] = useState<ReceiptWithItems | null>(null);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
     queryFn: async () => listInventory(),
+  });
+  const { data: recentReceipts } = useQuery({
+    queryKey: ["recent-receipts"],
+    queryFn: async () => listRecentReceipts(),
   });
   const filtered = useMemo(
     () =>
@@ -102,6 +135,10 @@ function Inventory() {
         (p) => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.barcode.includes(q),
       ),
     [data, q],
+  );
+  const receiptSubtotal = receiptItems.reduce(
+    (sum, item) => sum + item.quantity * item.unit_price,
+    0,
   );
 
   const adjustStock = useMutation({
@@ -114,6 +151,27 @@ function Inventory() {
           `${action} ${result.product.name}: ${result.product.previous_quantity} -> ${result.product.quantity}`,
         );
         setCameraActive(false);
+
+        if (result.mode === "remove") {
+          const product = result.product;
+          setReceiptItems((prev) => {
+            const idx = prev.findIndex((item) => item.product_id === product.id);
+            if (idx === -1) {
+              return [
+                ...prev,
+                {
+                  product_id: product.id,
+                  description: product.name,
+                  quantity: 1,
+                  unit_price: Number(product.selling_price),
+                },
+              ];
+            }
+            const next = [...prev];
+            next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+            return next;
+          });
+        }
       } else if (result.status === "out_of_stock") {
         toast.warning(`${result.product.name} is out of stock`);
       } else {
@@ -134,6 +192,40 @@ function Inventory() {
 
   adjustStockRef.current = adjustStock;
   cameraZoomRef.current = cameraZoom;
+
+  const saveReceipt = useMutation({
+    mutationFn: async () =>
+      createReceipt({
+        data: {
+          items: receiptItems,
+          customer_name: customerName || null,
+          cash_paid: Number(cashPaid) || 0,
+        },
+      }),
+    onSuccess: (receipt) => {
+      toast.success(`Receipt #${receipt.invoice_number} saved`);
+      setPrintReceipt(receipt);
+      setReceiptItems([]);
+      setCustomerName("");
+      setCashPaid("");
+      qc.invalidateQueries({ queryKey: ["recent-receipts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reprintReceipt = useMutation({
+    mutationFn: async (id: string) => getReceipt({ data: { id } }),
+    onSuccess: (receipt) => {
+      if (receipt) setPrintReceipt(receipt);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  useEffect(() => {
+    if (!printReceipt) return;
+    const timer = window.setTimeout(() => window.print(), 150);
+    return () => window.clearTimeout(timer);
+  }, [printReceipt]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -355,6 +447,126 @@ function Inventory() {
           </div>
         )}
       </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium">Receipt</div>
+            <p className="text-xs text-muted-foreground">
+              Items removed via scan are added here. Save to print.
+            </p>
+          </div>
+          {receiptItems.length > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setReceiptItems([])}>
+              <Trash2 className="size-4 mr-1.5" />
+              Clear
+            </Button>
+          )}
+        </div>
+
+        {receiptItems.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No items scanned yet.
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-muted-foreground">
+                  <tr className="text-left">
+                    <th className="py-1 pr-2 font-medium">Qty</th>
+                    <th className="py-1 pr-2 font-medium">Description</th>
+                    <th className="py-1 pr-2 text-right font-medium">Price</th>
+                    <th className="py-1 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {receiptItems.map((item) => (
+                    <tr key={item.product_id ?? item.description}>
+                      <td className="py-1.5 pr-2 tabular-nums">{item.quantity}</td>
+                      <td className="py-1.5 pr-2">{item.description}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">
+                        {money(item.unit_price)}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {money(item.quantity * item.unit_price)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end text-sm font-semibold">
+              Subtotal: {money(receiptSubtotal)}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="customer-name">Customer name (optional)</Label>
+                <Input
+                  id="customer-name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cash-paid">Cash paid (optional)</Label>
+                <Input
+                  id="cash-paid"
+                  type="number"
+                  step="0.01"
+                  value={cashPaid}
+                  onChange={(e) => setCashPaid(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={saveReceipt.isPending}
+              onClick={() => saveReceipt.mutate()}
+            >
+              <Printer className="size-4 mr-1.5" />
+              {saveReceipt.isPending ? "Saving…" : "Save & Print"}
+            </Button>
+          </>
+        )}
+      </Card>
+
+      {recentReceipts && recentReceipts.length > 0 && (
+        <Card className="p-4 space-y-2">
+          <div className="text-sm font-medium">Recent receipts</div>
+          <div className="divide-y divide-border">
+            {recentReceipts.map((receipt) => (
+              <div key={receipt.id} className="flex items-center justify-between py-2 text-sm">
+                <div>
+                  <span className="font-medium">#{receipt.invoice_number}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
+                    {new Date(receipt.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={reprintReceipt.isPending}
+                  onClick={() => reprintReceipt.mutate(receipt.id)}
+                >
+                  <Printer className="size-4 mr-1.5" />
+                  Print
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {printReceipt && (
+        <div className="hidden print:block">
+          <ReceiptPrintView receipt={printReceipt} />
+        </div>
+      )}
+
       <div className="relative w-full sm:max-w-md">
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
