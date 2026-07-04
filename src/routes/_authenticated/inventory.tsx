@@ -10,7 +10,7 @@ import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-rea
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
-import { NotFoundException } from "@zxing/library";
+import { BarcodeFormat, DecodeHintType, NotFoundException } from "@zxing/library";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
@@ -26,6 +26,7 @@ function Inventory() {
   const [q, setQ] = useState("");
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
+  const [cameraCodeType, setCameraCodeType] = useState<"long" | "square">("long");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +92,29 @@ function Inventory() {
 
       try {
         if (!videoRef.current) return;
-        const reader = new BrowserMultiFormatReader();
+        const hints = new Map<DecodeHintType, unknown>();
+        hints.set(
+          DecodeHintType.POSSIBLE_FORMATS,
+          cameraCodeType === "square"
+            ? [
+                BarcodeFormat.QR_CODE,
+                BarcodeFormat.DATA_MATRIX,
+                BarcodeFormat.AZTEC,
+                BarcodeFormat.PDF_417,
+              ]
+            : [
+                BarcodeFormat.EAN_13,
+                BarcodeFormat.EAN_8,
+                BarcodeFormat.CODE_128,
+                BarcodeFormat.CODE_39,
+                BarcodeFormat.CODE_93,
+                BarcodeFormat.UPC_A,
+                BarcodeFormat.UPC_E,
+              ],
+        );
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints);
         const devices = await BrowserMultiFormatReader.listVideoInputDevices();
         const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
         controls = await reader.decodeFromVideoDevice(
@@ -121,7 +144,7 @@ function Inventory() {
 
     startCamera();
     return stopCamera;
-  }, [cameraActive, scanMode]);
+  }, [cameraActive, cameraCodeType, scanMode]);
 
   const handleScan = () => {
     const barcode = scanCode.trim();
@@ -154,6 +177,24 @@ function Inventory() {
               <ToggleGroupItem value="return" aria-label="Add one item">
                 <RotateCcw className="size-4 mr-1.5" />
                 Add
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-sm font-medium">Camera type</div>
+            <ToggleGroup
+              type="single"
+              value={cameraCodeType}
+              onValueChange={(value) => {
+                if (value === "long" || value === "square") setCameraCodeType(value);
+              }}
+              className="justify-start"
+            >
+              <ToggleGroupItem value="long" aria-label="Scan long barcode">
+                Long
+              </ToggleGroupItem>
+              <ToggleGroupItem value="square" aria-label="Scan square code">
+                Square
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -202,7 +243,13 @@ function Inventory() {
             {cameraActive ? (
               <div className="relative aspect-[4/3] max-h-[460px] bg-black">
                 <video ref={videoRef} className="size-full object-cover" playsInline muted />
-                <div className="pointer-events-none absolute inset-x-[18%] top-1/2 h-28 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                <div
+                  className={
+                    cameraCodeType === "square"
+                      ? "pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[62%] max-w-72 -translate-x-1/2 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                      : "pointer-events-none absolute inset-x-[12%] top-1/2 h-24 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                  }
+                />
               </div>
             ) : null}
             {cameraError ? (
