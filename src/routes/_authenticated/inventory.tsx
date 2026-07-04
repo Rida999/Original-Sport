@@ -22,11 +22,20 @@ type StockAdjustment = {
   mutate: (variables: { barcode: string; mode: "remove" | "return" }) => void;
 };
 
+const textCodeFromOcr = (text: string) => {
+  const cleaned = text
+    .toUpperCase()
+    .split(/[\s\n\r]+/)
+    .map((part) => part.replace(/[^A-Z0-9-]/g, ""))
+    .filter((part) => part.length >= 3 && part.length <= 40 && /\d/.test(part));
+  return cleaned[0] ?? "";
+};
+
 function Inventory() {
   const [q, setQ] = useState("");
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
-  const [cameraCodeType, setCameraCodeType] = useState<"long" | "square">("long");
+  const [cameraCodeType, setCameraCodeType] = useState<"long" | "text">("long");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -79,12 +88,18 @@ function Inventory() {
     if (!cameraActive) return;
 
     let controls: IScannerControls | null = null;
+    let stream: MediaStream | null = null;
+    let ocrTimer = 0;
+    let ocrBusy = false;
     let stopped = false;
 
     const stopCamera = () => {
       stopped = true;
+      if (ocrTimer) window.clearInterval(ocrTimer);
       controls?.stop();
       controls = null;
+      stream?.getTracks().forEach((track) => track.stop());
+      stream = null;
     };
 
     const startCamera = async () => {
@@ -92,26 +107,63 @@ function Inventory() {
 
       try {
         if (!videoRef.current) return;
+
+        if (cameraCodeType === "text") {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          const { recognize } = await import("tesseract.js");
+
+          const scanText = async () => {
+            if (stopped || ocrBusy || !videoRef.current || adjustStockRef.current?.isPending) {
+              return;
+            }
+            const video = videoRef.current;
+            if (!video.videoWidth || !video.videoHeight) return;
+
+            ocrBusy = true;
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              const context = canvas.getContext("2d");
+              if (!context) return;
+              context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const result = await recognize(canvas, "eng");
+              const code = textCodeFromOcr(result.data.text);
+              if (code && scanCooldownRef.current !== code) {
+                scanCooldownRef.current = code;
+                setScanCode(code);
+                adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
+                window.setTimeout(() => {
+                  if (scanCooldownRef.current === code) scanCooldownRef.current = "";
+                }, 2200);
+              }
+            } catch {
+              setCameraError("Could not read the text. Try better light or move closer.");
+            } finally {
+              ocrBusy = false;
+            }
+          };
+
+          await scanText();
+          ocrTimer = window.setInterval(scanText, 2200);
+          return;
+        }
+
         const hints = new Map<DecodeHintType, unknown>();
-        hints.set(
-          DecodeHintType.POSSIBLE_FORMATS,
-          cameraCodeType === "square"
-            ? [
-                BarcodeFormat.QR_CODE,
-                BarcodeFormat.DATA_MATRIX,
-                BarcodeFormat.AZTEC,
-                BarcodeFormat.PDF_417,
-              ]
-            : [
-                BarcodeFormat.EAN_13,
-                BarcodeFormat.EAN_8,
-                BarcodeFormat.CODE_128,
-                BarcodeFormat.CODE_39,
-                BarcodeFormat.CODE_93,
-                BarcodeFormat.UPC_A,
-                BarcodeFormat.UPC_E,
-              ],
-        );
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.CODE_93,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+        ]);
         hints.set(DecodeHintType.TRY_HARDER, true);
 
         const reader = new BrowserMultiFormatReader(hints);
@@ -186,21 +238,21 @@ function Inventory() {
               type="single"
               value={cameraCodeType}
               onValueChange={(value) => {
-                if (value === "long" || value === "square") setCameraCodeType(value);
+                if (value === "long" || value === "text") setCameraCodeType(value);
               }}
               className="justify-start"
             >
               <ToggleGroupItem value="long" aria-label="Scan long barcode">
                 Long
               </ToggleGroupItem>
-              <ToggleGroupItem value="square" aria-label="Scan square code">
-                Square
+              <ToggleGroupItem value="text" aria-label="Scan printed text">
+                Text
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
             <label htmlFor="stock-scan" className="text-sm font-medium">
-              Barcode
+              Code
             </label>
             <div className="relative">
               <ScanLine className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -208,7 +260,7 @@ function Inventory() {
                 id="stock-scan"
                 ref={scanInputRef}
                 className="pl-9 font-mono"
-                placeholder="Scan barcode"
+                placeholder="Scan barcode or text"
                 value={scanCode}
                 autoComplete="off"
                 onChange={(e) => setScanCode(e.target.value)}
@@ -245,8 +297,8 @@ function Inventory() {
                 <video ref={videoRef} className="size-full object-cover" playsInline muted />
                 <div
                   className={
-                    cameraCodeType === "square"
-                      ? "pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[62%] max-w-72 -translate-x-1/2 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                    cameraCodeType === "text"
+                      ? "pointer-events-none absolute inset-x-[10%] top-1/2 h-32 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
                       : "pointer-events-none absolute inset-x-[12%] top-1/2 h-24 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
                   }
                 />

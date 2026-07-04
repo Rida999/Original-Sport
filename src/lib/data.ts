@@ -491,7 +491,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
                when status = 'out_of_stock' then 'available'::product_status
                else status
              end
-         where barcode = $1
+         where barcode = $1 or article_number = $1
          returning id, barcode, name, quantity - 1 as previous_quantity, quantity, min_stock`,
         [barcode],
       );
@@ -526,7 +526,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
              when status = 'out_of_stock' then 'available'::product_status
              else status
            end
-       where barcode = $1 and quantity > 0
+       where (barcode = $1 or article_number = $1) and quantity > 0
        returning id, barcode, name, quantity + 1 as previous_quantity, quantity, min_stock`,
       [barcode],
     );
@@ -549,7 +549,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
     }
 
     const existing = await one<Pick<Product, "id" | "barcode" | "name" | "quantity">>(
-      "select id, barcode, name, quantity from products where barcode = $1",
+      "select id, barcode, name, quantity from products where barcode = $1 or article_number = $1",
       [barcode],
     );
 
