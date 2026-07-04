@@ -138,11 +138,10 @@ export function SimpleCrud({
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[520px] text-sm">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr className="text-left">
                 <th className="p-3 font-medium">Name</th>
-                <th className="p-3 font-medium">Slug</th>
                 <th className="p-3 font-medium">Description</th>
                 <th className="p-3 pr-4 w-28"></th>
               </tr>
@@ -150,14 +149,14 @@ export function SimpleCrud({
             <tbody className="divide-y divide-border">
               {isLoading && (
                 <tr>
-                  <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={3} className="p-6 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               )}
               {!isLoading && data?.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-10 text-center text-muted-foreground">
+                  <td colSpan={3} className="p-10 text-center text-muted-foreground">
                     No {plural.toLowerCase()} yet.
                   </td>
                 </tr>
@@ -165,7 +164,6 @@ export function SimpleCrud({
               {data?.map((r) => (
                 <tr key={r.id} className="hover:bg-muted/30">
                   <td className="p-3 font-medium">{r.name}</td>
-                  <td className="p-3 font-mono text-xs text-muted-foreground">{r.slug}</td>
                   <td className="p-3 text-muted-foreground truncate max-w-md">
                     {r.description ?? "—"}
                   </td>

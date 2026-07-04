@@ -9,8 +9,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { toast } from "sonner";
-import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
-import { BarcodeFormat, DecodeHintType, NotFoundException } from "@zxing/library";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
@@ -76,7 +74,6 @@ function Inventory() {
   const [q, setQ] = useState("");
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
-  const [cameraCodeType, setCameraCodeType] = useState<"long" | "text">("long");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [cameraZoom, setCameraZoom] = useState(DEFAULT_CAMERA_ZOOM);
@@ -109,6 +106,7 @@ function Inventory() {
         toast.success(
           `${action} ${result.product.name}: ${result.product.previous_quantity} -> ${result.product.quantity}`,
         );
+        setCameraActive(false);
       } else if (result.status === "out_of_stock") {
         toast.warning(`${result.product.name} is out of stock`);
       } else {
@@ -138,7 +136,6 @@ function Inventory() {
   useEffect(() => {
     if (!cameraActive) return;
 
-    let controls: IScannerControls | null = null;
     let stream: MediaStream | null = null;
     let ocrTimer = 0;
     let ocrBusy = false;
@@ -147,8 +144,6 @@ function Inventory() {
     const stopCamera = () => {
       stopped = true;
       if (ocrTimer) window.clearInterval(ocrTimer);
-      controls?.stop();
-      controls = null;
       cameraStreamRef.current = null;
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
@@ -160,110 +155,67 @@ function Inventory() {
       try {
         if (!videoRef.current) return;
 
-        if (cameraCodeType === "text") {
-          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-          const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: cameraConstraints(backCamera?.deviceId, cameraZoomRef.current),
-            audio: false,
-          });
-          cameraStreamRef.current = stream;
-          await applyCameraZoom(stream, cameraZoomRef.current);
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          const { recognize } = await import("tesseract.js");
-
-          const scanText = async () => {
-            if (stopped || ocrBusy || !videoRef.current || adjustStockRef.current?.isPending) {
-              return;
-            }
-            const video = videoRef.current;
-            if (!video.videoWidth || !video.videoHeight) return;
-
-            ocrBusy = true;
-            try {
-              const canvas = document.createElement("canvas");
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              const context = canvas.getContext("2d");
-              if (!context) return;
-              const zoom = cameraZoomRef.current;
-              const sourceWidth = video.videoWidth / zoom;
-              const sourceHeight = video.videoHeight / zoom;
-              const sourceX = (video.videoWidth - sourceWidth) / 2;
-              const sourceY = (video.videoHeight - sourceHeight) / 2;
-              context.drawImage(
-                video,
-                sourceX,
-                sourceY,
-                sourceWidth,
-                sourceHeight,
-                0,
-                0,
-                canvas.width,
-                canvas.height,
-              );
-              const result = await recognize(canvas, "eng");
-              const code = textCodeFromOcr(result.data.text);
-              if (code && scanCooldownRef.current !== code) {
-                scanCooldownRef.current = code;
-                setScanCode(code);
-                adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
-                window.setTimeout(() => {
-                  if (scanCooldownRef.current === code) scanCooldownRef.current = "";
-                }, 2200);
-              }
-            } catch {
-              setCameraError("Could not read the text. Try better light or move closer.");
-            } finally {
-              ocrBusy = false;
-            }
-          };
-
-          await scanText();
-          ocrTimer = window.setInterval(scanText, 2200);
-          return;
-        }
-
-        const hints = new Map<DecodeHintType, unknown>();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.EAN_13,
-          BarcodeFormat.EAN_8,
-          BarcodeFormat.CODE_128,
-          BarcodeFormat.CODE_39,
-          BarcodeFormat.CODE_93,
-          BarcodeFormat.UPC_A,
-          BarcodeFormat.UPC_E,
-        ]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-
-        const reader = new BrowserMultiFormatReader(hints);
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        const devices = await navigator.mediaDevices.enumerateDevices();
         const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
-        controls = await reader.decodeFromConstraints(
-          { video: cameraConstraints(backCamera?.deviceId, cameraZoomRef.current), audio: false },
-          videoRef.current,
-          (result, error) => {
-            if (stopped) return;
-            if (result && !adjustStockRef.current?.isPending) {
-              const code = result.getText().trim();
-              if (!code || scanCooldownRef.current === code) return;
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: cameraConstraints(backCamera?.deviceId, cameraZoomRef.current),
+          audio: false,
+        });
+        cameraStreamRef.current = stream;
+        await applyCameraZoom(stream, cameraZoomRef.current);
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const { recognize } = await import("tesseract.js");
+
+        const scanText = async () => {
+          if (stopped || ocrBusy || !videoRef.current || adjustStockRef.current?.isPending) {
+            return;
+          }
+          const video = videoRef.current;
+          if (!video.videoWidth || !video.videoHeight) return;
+
+          ocrBusy = true;
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext("2d");
+            if (!context) return;
+            const zoom = cameraZoomRef.current;
+            const sourceWidth = video.videoWidth / zoom;
+            const sourceHeight = video.videoHeight / zoom;
+            const sourceX = (video.videoWidth - sourceWidth) / 2;
+            const sourceY = (video.videoHeight - sourceHeight) / 2;
+            context.drawImage(
+              video,
+              sourceX,
+              sourceY,
+              sourceWidth,
+              sourceHeight,
+              0,
+              0,
+              canvas.width,
+              canvas.height,
+            );
+            const result = await recognize(canvas, "eng");
+            const code = textCodeFromOcr(result.data.text);
+            if (code && scanCooldownRef.current !== code) {
               scanCooldownRef.current = code;
               setScanCode(code);
               adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
               window.setTimeout(() => {
                 if (scanCooldownRef.current === code) scanCooldownRef.current = "";
-              }, 1600);
-            } else if (error && !(error instanceof NotFoundException)) {
-              setCameraError("Could not read the code. Try better light or move closer.");
+              }, 2200);
             }
-          },
-        );
-        const controlsStream = videoRef.current.srcObject;
-        if (controlsStream instanceof MediaStream) {
-          cameraStreamRef.current = controlsStream;
-          await applyCameraZoom(controlsStream, cameraZoomRef.current);
-        }
+          } catch {
+            setCameraError("Could not read the text. Try better light or move closer.");
+          } finally {
+            ocrBusy = false;
+          }
+        };
+
+        await scanText();
+        ocrTimer = window.setInterval(scanText, 2200);
       } catch {
         setCameraError("Camera permission was blocked or no camera was found.");
         setCameraActive(false);
@@ -272,7 +224,7 @@ function Inventory() {
 
     startCamera();
     return stopCamera;
-  }, [cameraActive, cameraCodeType, scanMode]);
+  }, [cameraActive, scanMode]);
 
   const handleScan = () => {
     const barcode = scanCode.trim();
@@ -325,24 +277,6 @@ function Inventory() {
               <ToggleGroupItem value="return" aria-label="Add one item">
                 <RotateCcw className="size-4 mr-1.5" />
                 Add
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-          <div className="space-y-1.5">
-            <div className="text-sm font-medium">Camera type</div>
-            <ToggleGroup
-              type="single"
-              value={cameraCodeType}
-              onValueChange={(value) => {
-                if (value === "long" || value === "text") setCameraCodeType(value);
-              }}
-              className="justify-start"
-            >
-              <ToggleGroupItem value="long" aria-label="Scan long barcode">
-                Long
-              </ToggleGroupItem>
-              <ToggleGroupItem value="text" aria-label="Scan printed text">
-                Text
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -405,13 +339,7 @@ function Inventory() {
                 <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-black/65 px-2 py-1 text-xs font-medium text-white">
                   {cameraZoom.toFixed(1)}x
                 </div>
-                <div
-                  className={
-                    cameraCodeType === "text"
-                      ? "pointer-events-none absolute inset-x-[10%] top-1/2 h-32 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
-                      : "pointer-events-none absolute inset-x-[12%] top-1/2 h-24 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
-                  }
-                />
+                <div className="pointer-events-none absolute inset-x-[10%] top-1/2 h-32 -translate-y-1/2 rounded-md border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
               </div>
             ) : null}
             {cameraError ? (
