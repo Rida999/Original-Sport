@@ -424,7 +424,7 @@ function ProductsList() {
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
-          placeholder="Search by name, barcode, category…"
+          placeholder="Search by name, barcode, category..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -575,7 +575,7 @@ function ProductsList() {
                     <td className="p-3 font-mono text-xs text-muted-foreground">
                       {p.article_number ?? p.barcode}
                     </td>
-                    <td className="p-3">{p.category?.name ?? "—"}</td>
+                    <td className="p-3">{p.category?.name ?? "-"}</td>
                     <td className="p-3">{formatGender(p.gender)}</td>
                     <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
                     <td className="p-3 text-right tabular-nums">{p.quantity}</td>

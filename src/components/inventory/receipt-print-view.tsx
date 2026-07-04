@@ -67,7 +67,7 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <div className="flex justify-between">
         <span>Qty</span>
-        <span>Discount</span>
+        <span>Apply discount</span>
         <span>Total TTC</span>
       </div>
       <div className="flex justify-between font-semibold">
@@ -89,12 +89,12 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <div className="my-2 border-t border-dashed border-black" />
 
-      <div className="flex justify-between">
-        <span>Cash Paid</span>
+      <div className="flex justify-between font-semibold">
+        <span>Paid USD</span>
         <span>{receipt.cash_paid.toFixed(2)}</span>
       </div>
-      <div className="flex justify-between">
-        <span>Cash Exchange</span>
+      <div className="flex justify-between font-semibold">
+        <span>Change USD</span>
         <span>{receipt.cash_exchange.toFixed(2)}</span>
       </div>
     </div>

@@ -15,7 +15,6 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedReceiptsRouteImport } from './routes/_authenticated/receipts'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedCategoriesRouteImport } from './routes/_authenticated/categories'
 import { Route as AuthenticatedArchiveRouteImport } from './routes/_authenticated/archive'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as PrintReceiptIdRouteImport } from './routes/print/receipt/$id'
@@ -51,11 +50,6 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCategoriesRoute = AuthenticatedCategoriesRouteImport.update({
-  id: '/categories',
-  path: '/categories',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedArchiveRoute = AuthenticatedArchiveRouteImport.update({
   id: '/archive',
   path: '/archive',
@@ -87,7 +81,6 @@ const AuthenticatedProductsIdRoute = AuthenticatedProductsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/archive': typeof AuthenticatedArchiveRoute
-  '/categories': typeof AuthenticatedCategoriesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/receipts': typeof AuthenticatedReceiptsRoute
@@ -100,7 +93,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/archive': typeof AuthenticatedArchiveRoute
-  '/categories': typeof AuthenticatedCategoriesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/receipts': typeof AuthenticatedReceiptsRoute
@@ -115,7 +107,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/archive': typeof AuthenticatedArchiveRoute
-  '/_authenticated/categories': typeof AuthenticatedCategoriesRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/receipts': typeof AuthenticatedReceiptsRoute
@@ -130,7 +121,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/archive'
-    | '/categories'
     | '/dashboard'
     | '/inventory'
     | '/receipts'
@@ -143,7 +133,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/archive'
-    | '/categories'
     | '/dashboard'
     | '/inventory'
     | '/receipts'
@@ -157,7 +146,6 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/_authenticated/archive'
-    | '/_authenticated/categories'
     | '/_authenticated/dashboard'
     | '/_authenticated/inventory'
     | '/_authenticated/receipts'
@@ -218,13 +206,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/categories': {
-      id: '/_authenticated/categories'
-      path: '/categories'
-      fullPath: '/categories'
-      preLoaderRoute: typeof AuthenticatedCategoriesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/archive': {
       id: '/_authenticated/archive'
       path: '/archive'
@@ -265,7 +246,6 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedArchiveRoute: typeof AuthenticatedArchiveRoute
-  AuthenticatedCategoriesRoute: typeof AuthenticatedCategoriesRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedReceiptsRoute: typeof AuthenticatedReceiptsRoute
@@ -277,7 +257,6 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedArchiveRoute: AuthenticatedArchiveRoute,
-  AuthenticatedCategoriesRoute: AuthenticatedCategoriesRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedReceiptsRoute: AuthenticatedReceiptsRoute,
