@@ -18,21 +18,21 @@ function Dashboard() {
 
   const stats = [
     {
-      label: "Total Products",
-      value: data?.totalProducts ?? 0,
+      label: "Total Items",
+      value: data?.totalStock ?? 0,
       icon: Package,
       accent: "text-primary",
     },
     { label: "Categories", value: data?.totalCategories ?? 0, icon: Tags, accent: "text-primary" },
     {
       label: "Low Stock",
-      value: data?.lowStock.length ?? 0,
+      value: data?.lowStockCount ?? 0,
       icon: AlertTriangle,
       accent: "text-warning",
     },
     {
       label: "Out of Stock",
-      value: data?.outOfStock.length ?? 0,
+      value: data?.outOfStockCount ?? 0,
       icon: XCircle,
       accent: "text-destructive",
     },
