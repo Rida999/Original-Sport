@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { getSoldProductsReport, listReportProducts } from "@/lib/data";
+import { getSoldProductsReport, listReportProducts } from "@/server/reports";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, ShoppingBag } from "lucide-react";

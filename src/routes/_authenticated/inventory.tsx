@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adjustProductStockByBarcode, listInventory } from "@/lib/data";
+import { adjustProductStockByBarcode, listInventory } from "@/server/inventory";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

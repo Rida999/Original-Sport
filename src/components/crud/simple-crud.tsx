@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteCrud, listCrud, saveCrud } from "@/lib/data";
+import { deleteCrud, listCrud, saveCrud } from "@/server/categories";
 import {
   Dialog,
   DialogContent,
