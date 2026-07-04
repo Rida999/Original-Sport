@@ -96,6 +96,8 @@ const textCodeFromOcr = (text: string) => {
   return cleaned[0] ?? "";
 };
 
+const discountOptions = [10, 15, 20, 25] as const;
+
 function Inventory() {
   const [q, setQ] = useState("");
   const [scanCode, setScanCode] = useState("");
@@ -113,6 +115,9 @@ function Inventory() {
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [cashPaid, setCashPaid] = useState("");
+  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">("none");
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [customDiscountPercent, setCustomDiscountPercent] = useState("");
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
@@ -133,6 +138,13 @@ function Inventory() {
     (sum, item) => sum + item.quantity * item.unit_price,
     0,
   );
+  const activeDiscountPercent =
+    discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
+  const discountAmount = Math.min(
+    receiptSubtotal,
+    Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
+  );
+  const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
 
   const adjustStock = useMutation({
     mutationFn: async ({ barcode, mode }: { barcode: string; mode: "remove" | "return" }) =>
@@ -192,6 +204,7 @@ function Inventory() {
         data: {
           items: receiptItems,
           customer_name: customerName || null,
+          discount: discountAmount,
           cash_paid: Number(cashPaid) || 0,
         },
       }),
@@ -201,6 +214,9 @@ function Inventory() {
       setReceiptItems([]);
       setCustomerName("");
       setCashPaid("");
+      setDiscountMode("none");
+      setDiscountPercent(0);
+      setCustomDiscountPercent("");
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -436,7 +452,17 @@ function Inventory() {
             </p>
           </div>
           {receiptItems.length > 0 && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => setReceiptItems([])}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReceiptItems([]);
+                setDiscountMode("none");
+                setDiscountPercent(0);
+                setCustomDiscountPercent("");
+              }}
+            >
               <Trash2 className="size-4 mr-1.5" />
               Clear
             </Button>
@@ -477,6 +503,73 @@ function Inventory() {
             </div>
             <div className="flex justify-end text-sm font-semibold">
               Subtotal: {money(receiptSubtotal)}
+            </div>
+            <div className="space-y-2">
+              <Label>Discount</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={discountMode === "none" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setDiscountMode("none");
+                    setDiscountPercent(0);
+                    setCustomDiscountPercent("");
+                  }}
+                >
+                  None
+                </Button>
+                {discountOptions.map((percent) => (
+                  <Button
+                    key={percent}
+                    type="button"
+                    variant={
+                      discountMode === "preset" && discountPercent === percent
+                        ? "default"
+                        : "outline"
+                    }
+                    size="sm"
+                    onClick={() => {
+                      setDiscountMode("preset");
+                      setDiscountPercent(percent);
+                      setCustomDiscountPercent("");
+                    }}
+                  >
+                    {percent}%
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant={discountMode === "custom" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setDiscountMode("custom");
+                    setDiscountPercent(0);
+                  }}
+                >
+                  Custom
+                </Button>
+              </div>
+              {discountMode === "custom" && (
+                <Input
+                  className="max-w-40"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  placeholder="Percent"
+                  type="number"
+                  value={customDiscountPercent}
+                  onChange={(e) => setCustomDiscountPercent(e.target.value)}
+                />
+              )}
+              {discountAmount > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Discount: -{money(discountAmount)}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end text-sm font-semibold">
+              Total: {money(receiptTotal)}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
