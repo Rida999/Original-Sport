@@ -4,13 +4,34 @@ const { Pool } = pg;
 
 let pool: pg.Pool | undefined;
 
+function shouldUseSsl(connectionString: string) {
+  return (
+    connectionString.includes("supabase.co") ||
+    connectionString.includes("supabase.com") ||
+    connectionString.includes("sslmode=require")
+  );
+}
+
+function withoutSslQueryParams(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    url.searchParams.delete("sslmode");
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
 export function getPool() {
   if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is missing. Point it to your local PostgreSQL database.");
+    throw new Error("DATABASE_URL is missing. Add your Supabase PostgreSQL connection string.");
   }
 
+  const connectionString = process.env.DATABASE_URL;
+
   pool ??= new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: withoutSslQueryParams(connectionString),
+    ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
   });
 
   return pool;

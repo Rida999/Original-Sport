@@ -7,9 +7,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "db:start": "pg_ctl -D .local_pg_data status || pg_ctl -D .local_pg_data -o \"-p 55432\" -l .local_pg_data/server.log start",
-    "db:stop": "pg_ctl -D .local_pg_data stop",
-    "db:schema": "psql -h localhost -p 55432 -d Original_Sports -f db/schema.sql",
+    "vercel-build": "npm run build && node scripts/build-vercel.mjs",
+    "db:deploy": "psql \"$DATABASE_URL\" -f db/schema.sql",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write ."
