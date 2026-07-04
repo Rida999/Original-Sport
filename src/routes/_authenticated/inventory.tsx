@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { toast } from "sonner";
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType, NotFoundException } from "@zxing/library";
@@ -22,7 +22,9 @@ type StockAdjustment = {
   mutate: (variables: { barcode: string; mode: "remove" | "return" }) => void;
 };
 
-const CAMERA_ZOOM = 1.8;
+const DEFAULT_CAMERA_ZOOM = 1.8;
+const MIN_CAMERA_ZOOM = 1;
+const MAX_CAMERA_ZOOM = 3.5;
 
 type ZoomTrackCapabilities = MediaTrackCapabilities & {
   zoom?: { min?: number; max?: number };
@@ -32,22 +34,32 @@ type ZoomTrackConstraints = MediaTrackConstraintSet & {
   zoom?: number;
 };
 
-const cameraConstraints = (deviceId?: string): MediaTrackConstraints =>
+const clampCameraZoom = (zoom: number) =>
+  Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
+
+const touchDistance = (touches: TouchList) => {
+  const first = touches.item(0);
+  const second = touches.item(1);
+  if (!first || !second) return 0;
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+};
+
+const cameraConstraints = (deviceId: string | undefined, zoom: number): MediaTrackConstraints =>
   ({
     ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
     width: { ideal: 1920 },
     height: { ideal: 1080 },
-    advanced: [{ zoom: CAMERA_ZOOM } as ZoomTrackConstraints],
+    advanced: [{ zoom } as ZoomTrackConstraints],
   }) as MediaTrackConstraints;
 
-const applyCameraZoom = async (stream: MediaStream) => {
+const applyCameraZoom = async (stream: MediaStream, zoom: number) => {
   const [track] = stream.getVideoTracks();
   if (!track) return;
   const capabilities = track.getCapabilities?.() as ZoomTrackCapabilities | undefined;
   const maxZoom = capabilities?.zoom?.max;
   if (!maxZoom) return;
   await track.applyConstraints({
-    advanced: [{ zoom: Math.min(CAMERA_ZOOM, maxZoom) } as ZoomTrackConstraints],
+    advanced: [{ zoom: Math.min(zoom, maxZoom) } as ZoomTrackConstraints],
   });
 };
 
@@ -67,9 +79,13 @@ function Inventory() {
   const [cameraCodeType, setCameraCodeType] = useState<"long" | "text">("long");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [cameraZoom, setCameraZoom] = useState(DEFAULT_CAMERA_ZOOM);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanCooldownRef = useRef("");
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
+  const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
   const qc = useQueryClient();
   const { data } = useQuery({
@@ -112,6 +128,12 @@ function Inventory() {
   });
 
   adjustStockRef.current = adjustStock;
+  cameraZoomRef.current = cameraZoom;
+
+  useEffect(() => {
+    const stream = cameraStreamRef.current;
+    if (stream) void applyCameraZoom(stream, cameraZoom);
+  }, [cameraZoom]);
 
   useEffect(() => {
     if (!cameraActive) return;
@@ -127,6 +149,7 @@ function Inventory() {
       if (ocrTimer) window.clearInterval(ocrTimer);
       controls?.stop();
       controls = null;
+      cameraStreamRef.current = null;
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
     };
@@ -141,10 +164,11 @@ function Inventory() {
           const devices = await BrowserMultiFormatReader.listVideoInputDevices();
           const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
           stream = await navigator.mediaDevices.getUserMedia({
-            video: cameraConstraints(backCamera?.deviceId),
+            video: cameraConstraints(backCamera?.deviceId, cameraZoomRef.current),
             audio: false,
           });
-          await applyCameraZoom(stream);
+          cameraStreamRef.current = stream;
+          await applyCameraZoom(stream, cameraZoomRef.current);
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           const { recognize } = await import("tesseract.js");
@@ -163,8 +187,9 @@ function Inventory() {
               canvas.height = video.videoHeight;
               const context = canvas.getContext("2d");
               if (!context) return;
-              const sourceWidth = video.videoWidth / CAMERA_ZOOM;
-              const sourceHeight = video.videoHeight / CAMERA_ZOOM;
+              const zoom = cameraZoomRef.current;
+              const sourceWidth = video.videoWidth / zoom;
+              const sourceHeight = video.videoHeight / zoom;
               const sourceX = (video.videoWidth - sourceWidth) / 2;
               const sourceY = (video.videoHeight - sourceHeight) / 2;
               context.drawImage(
@@ -216,7 +241,7 @@ function Inventory() {
         const devices = await BrowserMultiFormatReader.listVideoInputDevices();
         const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
         controls = await reader.decodeFromConstraints(
-          { video: cameraConstraints(backCamera?.deviceId), audio: false },
+          { video: cameraConstraints(backCamera?.deviceId, cameraZoomRef.current), audio: false },
           videoRef.current,
           (result, error) => {
             if (stopped) return;
@@ -235,7 +260,10 @@ function Inventory() {
           },
         );
         const controlsStream = videoRef.current.srcObject;
-        if (controlsStream instanceof MediaStream) await applyCameraZoom(controlsStream);
+        if (controlsStream instanceof MediaStream) {
+          cameraStreamRef.current = controlsStream;
+          await applyCameraZoom(controlsStream, cameraZoomRef.current);
+        }
       } catch {
         setCameraError("Camera permission was blocked or no camera was found.");
         setCameraActive(false);
@@ -250,6 +278,26 @@ function Inventory() {
     const barcode = scanCode.trim();
     if (!barcode || adjustStock.isPending) return;
     adjustStock.mutate({ barcode, mode: scanMode });
+  };
+
+  const handleCameraTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length === 2) {
+      pinchDistanceRef.current = touchDistance(event.touches);
+    }
+  };
+
+  const handleCameraTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    event.preventDefault();
+    const nextDistance = touchDistance(event.touches);
+    const previousDistance = pinchDistanceRef.current || nextDistance;
+    if (!nextDistance || !previousDistance) return;
+    pinchDistanceRef.current = nextDistance;
+    setCameraZoom((zoom) => clampCameraZoom(zoom * (nextDistance / previousDistance)));
+  };
+
+  const handleCameraTouchEnd = () => {
+    pinchDistanceRef.current = 0;
   };
 
   return (
@@ -341,13 +389,22 @@ function Inventory() {
         {(cameraActive || cameraError) && (
           <div className="mt-4 overflow-hidden rounded-md border bg-muted/20">
             {cameraActive ? (
-              <div className="relative aspect-[4/3] max-h-[460px] bg-black">
+              <div
+                className="relative aspect-[4/3] max-h-[460px] touch-none bg-black"
+                onTouchEnd={handleCameraTouchEnd}
+                onTouchMove={handleCameraTouchMove}
+                onTouchStart={handleCameraTouchStart}
+              >
                 <video
                   ref={videoRef}
-                  className="size-full scale-[1.35] object-cover"
+                  className="size-full object-cover"
                   playsInline
+                  style={{ transform: `scale(${Math.max(1, cameraZoom / 1.35)})` }}
                   muted
                 />
+                <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-black/65 px-2 py-1 text-xs font-medium text-white">
+                  {cameraZoom.toFixed(1)}x
+                </div>
                 <div
                   className={
                     cameraCodeType === "text"
