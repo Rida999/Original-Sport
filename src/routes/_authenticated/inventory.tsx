@@ -9,21 +9,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Camera, RotateCcw, ScanLine, Search, ShoppingCart, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
+import { NotFoundException } from "@zxing/library";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
   component: Inventory,
 });
-
-type DetectedBarcode = { rawValue: string };
-
-type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
-  detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]>;
-};
-
-type WindowWithBarcodeDetector = Window & {
-  BarcodeDetector?: BarcodeDetectorConstructor;
-};
 
 type StockAdjustment = {
   isPending: boolean;
@@ -85,71 +77,42 @@ function Inventory() {
   useEffect(() => {
     if (!cameraActive) return;
 
-    let stream: MediaStream | null = null;
-    let frame = 0;
+    let controls: IScannerControls | null = null;
     let stopped = false;
 
     const stopCamera = () => {
       stopped = true;
-      if (frame) cancelAnimationFrame(frame);
-      stream?.getTracks().forEach((track) => track.stop());
-      stream = null;
+      controls?.stop();
+      controls = null;
     };
 
     const startCamera = async () => {
       setCameraError("");
-      const barcodeWindow = window as WindowWithBarcodeDetector;
-      if (!barcodeWindow.BarcodeDetector) {
-        setCameraError("Camera scanning is not supported by this browser.");
-        setCameraActive(false);
-        return;
-      }
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-
         if (!videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-
-        const detector = new barcodeWindow.BarcodeDetector({
-          formats: [
-            "qr_code",
-            "ean_13",
-            "ean_8",
-            "code_128",
-            "code_39",
-            "code_93",
-            "upc_a",
-            "upc_e",
-          ],
-        });
-
-        const detect = async () => {
-          if (stopped || !videoRef.current) return;
-          if (!adjustStockRef.current?.isPending) {
-            try {
-              const codes = await detector.detect(videoRef.current);
-              const code = codes[0]?.rawValue?.trim();
-              if (code && scanCooldownRef.current !== code) {
-                scanCooldownRef.current = code;
-                setScanCode(code);
-                adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
-                window.setTimeout(() => {
-                  if (scanCooldownRef.current === code) scanCooldownRef.current = "";
-                }, 1600);
-              }
-            } catch {
+        const reader = new BrowserMultiFormatReader();
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        const backCamera = devices.find((device) => /back|rear|environment/i.test(device.label));
+        controls = await reader.decodeFromVideoDevice(
+          backCamera?.deviceId,
+          videoRef.current,
+          (result, error) => {
+            if (stopped) return;
+            if (result && !adjustStockRef.current?.isPending) {
+              const code = result.getText().trim();
+              if (!code || scanCooldownRef.current === code) return;
+              scanCooldownRef.current = code;
+              setScanCode(code);
+              adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
+              window.setTimeout(() => {
+                if (scanCooldownRef.current === code) scanCooldownRef.current = "";
+              }, 1600);
+            } else if (error && !(error instanceof NotFoundException)) {
               setCameraError("Could not read the code. Try better light or move closer.");
             }
-          }
-          frame = requestAnimationFrame(detect);
-        };
-
-        detect();
+          },
+        );
       } catch {
         setCameraError("Camera permission was blocked or no camera was found.");
         setCameraActive(false);
