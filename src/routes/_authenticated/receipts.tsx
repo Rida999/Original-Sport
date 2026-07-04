@@ -1,16 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Printer, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getReceipt, listAllReceipts, type ReceiptWithItems } from "@/server/receipts";
-import { ReceiptPrintView } from "@/components/inventory/receipt-print-view";
+import { listAllReceipts } from "@/server/receipts";
 import { money } from "@/lib/format";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/receipts")({
   head: () => ({ meta: [{ title: "Receipts — SportsWear Inventory" }] }),
@@ -19,25 +17,10 @@ export const Route = createFileRoute("/_authenticated/receipts")({
 
 function ReceiptsPage() {
   const [q, setQ] = useState("");
-  const [printReceipt, setPrintReceipt] = useState<ReceiptWithItems | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["all-receipts"],
     queryFn: async () => listAllReceipts(),
   });
-
-  const reprintReceipt = useMutation({
-    mutationFn: async (id: string) => getReceipt({ data: { id } }),
-    onSuccess: (receipt) => {
-      if (receipt) setPrintReceipt(receipt);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  useEffect(() => {
-    if (!printReceipt) return;
-    const timer = window.setTimeout(() => window.print(), 150);
-    return () => window.clearTimeout(timer);
-  }, [printReceipt]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -109,8 +92,7 @@ function ReceiptsPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled={reprintReceipt.isPending}
-                      onClick={() => reprintReceipt.mutate(receipt.id)}
+                      onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
                     >
                       <Printer className="size-4 mr-1.5" />
                       Print
@@ -122,12 +104,6 @@ function ReceiptsPage() {
           </table>
         </div>
       </Card>
-
-      {printReceipt && (
-        <div className="hidden print:block">
-          <ReceiptPrintView receipt={printReceipt} />
-        </div>
-      )}
     </div>
   );
 }

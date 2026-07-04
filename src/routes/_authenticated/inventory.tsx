@@ -1,13 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adjustProductStockByBarcode, listInventory } from "@/server/inventory";
-import {
-  createReceipt,
-  getReceipt,
-  listRecentReceipts,
-  type ReceiptWithItems,
-} from "@/server/receipts";
-import { ReceiptPrintView } from "@/components/inventory/receipt-print-view";
+import { createReceipt, listRecentReceipts } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -119,7 +113,6 @@ function Inventory() {
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [cashPaid, setCashPaid] = useState("");
-  const [printReceipt, setPrintReceipt] = useState<ReceiptWithItems | null>(null);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
@@ -204,7 +197,7 @@ function Inventory() {
       }),
     onSuccess: (receipt) => {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
-      setPrintReceipt(receipt);
+      window.open(`/print/receipt/${receipt.id}`, "_blank");
       setReceiptItems([]);
       setCustomerName("");
       setCashPaid("");
@@ -212,20 +205,6 @@ function Inventory() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  const reprintReceipt = useMutation({
-    mutationFn: async (id: string) => getReceipt({ data: { id } }),
-    onSuccess: (receipt) => {
-      if (receipt) setPrintReceipt(receipt);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  useEffect(() => {
-    if (!printReceipt) return;
-    const timer = window.setTimeout(() => window.print(), 150);
-    return () => window.clearTimeout(timer);
-  }, [printReceipt]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -549,8 +528,7 @@ function Inventory() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={reprintReceipt.isPending}
-                  onClick={() => reprintReceipt.mutate(receipt.id)}
+                  onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
                 >
                   <Printer className="size-4 mr-1.5" />
                   Print
@@ -559,12 +537,6 @@ function Inventory() {
             ))}
           </div>
         </Card>
-      )}
-
-      {printReceipt && (
-        <div className="hidden print:block">
-          <ReceiptPrintView receipt={printReceipt} />
-        </div>
       )}
 
       <div className="relative w-full sm:max-w-md">
