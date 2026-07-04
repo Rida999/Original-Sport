@@ -131,7 +131,11 @@ function Inventory() {
   const filtered = useMemo(
     () =>
       (data ?? []).filter(
-        (p) => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.barcode.includes(q),
+        (p) =>
+          !q ||
+          p.name.toLowerCase().includes(q.toLowerCase()) ||
+          p.barcode.includes(q) ||
+          p.article_number?.includes(q),
       ),
     [data, q],
   );
@@ -419,7 +423,7 @@ function Inventory() {
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
             <label htmlFor="stock-scan" className="text-sm font-medium">
-              Code
+              Article number
             </label>
             <div className="relative">
               <ScanLine className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -713,7 +717,7 @@ function Inventory() {
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr className="text-left">
-                  <th className="p-3 font-medium">Barcode</th>
+                  <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
                   <th className="p-3 font-medium text-right">Current</th>
                   <th className="p-3 font-medium text-right">Minimum</th>
@@ -740,7 +744,9 @@ function Inventory() {
                           };
                   return (
                     <tr key={p.id} className="hover:bg-muted/30">
-                      <td className="p-3 font-mono text-xs text-muted-foreground">{p.barcode}</td>
+                      <td className="p-3 font-mono text-xs text-muted-foreground">
+                        {p.article_number ?? p.barcode}
+                      </td>
                       <td className="p-3 font-medium">{p.name}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
                       <td className="p-3 text-right tabular-nums text-muted-foreground">
