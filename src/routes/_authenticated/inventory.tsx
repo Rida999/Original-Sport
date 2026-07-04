@@ -368,7 +368,7 @@ function Inventory() {
                 id="stock-scan"
                 ref={scanInputRef}
                 className="pl-9 font-mono"
-                placeholder="Scan barcode or text"
+                placeholder="Scan text"
                 value={scanCode}
                 autoComplete="off"
                 onChange={(e) => setScanCode(e.target.value)}
