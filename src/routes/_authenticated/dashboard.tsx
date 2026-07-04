@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardStats } from "@/server/dashboard";
 import { Card } from "@/components/ui/card";
-import { Package, Tags, AlertTriangle, XCircle, Clock } from "lucide-react";
+import { Package, AlertTriangle, XCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -23,7 +23,6 @@ function Dashboard() {
       icon: Package,
       accent: "text-primary",
     },
-    { label: "Categories", value: data?.totalCategories ?? 0, icon: Tags, accent: "text-primary" },
     {
       label: "Low Stock",
       value: data?.lowStockCount ?? 0,
@@ -45,7 +44,7 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">Overview of your inventory</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
             <div className="flex items-center justify-between">

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adjustProductStockByBarcode, listInventory } from "@/server/inventory";
+import { adjustProductStockByBarcode, listInventory, restoreReceiptStock } from "@/server/inventory";
 import { createReceipt, listRecentReceipts } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +96,7 @@ const textCodeFromOcr = (text: string) => {
   return cleaned[0] ?? "";
 };
 
-const discountOptions = [10, 15, 20, 25] as const;
+const discountOptions = [15, 20, 25] as const;
 
 function Inventory() {
   const [q, setQ] = useState("");
@@ -113,7 +113,6 @@ function Inventory() {
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>([]);
-  const [customerName, setCustomerName] = useState("");
   const [cashPaid, setCashPaid] = useState("");
   const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">("none");
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -145,6 +144,22 @@ function Inventory() {
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
   );
   const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
+
+  const resetReceipt = () => {
+    setReceiptItems([]);
+    setDiscountMode("none");
+    setDiscountPercent(0);
+    setCustomDiscountPercent("");
+  };
+
+  const invalidateStockQueries = () => {
+    qc.invalidateQueries({ queryKey: ["inventory"] });
+    qc.invalidateQueries({ queryKey: ["products"] });
+    qc.invalidateQueries({ queryKey: ["archive"] });
+    qc.invalidateQueries({ queryKey: ["reports"] });
+    qc.invalidateQueries({ queryKey: ["sold-products-report"] });
+    qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  };
 
   const adjustStock = useMutation({
     mutationFn: async ({ barcode, mode }: { barcode: string; mode: "remove" | "return" }) =>
@@ -184,12 +199,7 @@ function Inventory() {
       }
 
       setScanCode("");
-      qc.invalidateQueries({ queryKey: ["inventory"] });
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["archive"] });
-      qc.invalidateQueries({ queryKey: ["reports"] });
-      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      invalidateStockQueries();
       requestAnimationFrame(() => scanInputRef.current?.focus());
     },
     onError: (e: Error) => toast.error(e.message),
@@ -198,12 +208,21 @@ function Inventory() {
   adjustStockRef.current = adjustStock;
   cameraZoomRef.current = cameraZoom;
 
+  const returnReceiptStock = useMutation({
+    mutationFn: async (items: { product_id: string | null; quantity: number }[]) =>
+      restoreReceiptStock({ data: { items } }),
+    onSuccess: () => {
+      invalidateStockQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const saveReceipt = useMutation({
     mutationFn: async () =>
       createReceipt({
         data: {
           items: receiptItems,
-          customer_name: customerName || null,
+          customer_name: null,
           discount: discountAmount,
           cash_paid: Number(cashPaid) || 0,
         },
@@ -211,16 +230,38 @@ function Inventory() {
     onSuccess: (receipt) => {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
       window.open(`/print/receipt/${receipt.id}`, "_blank");
-      setReceiptItems([]);
-      setCustomerName("");
+      resetReceipt();
       setCashPaid("");
-      setDiscountMode("none");
-      setDiscountPercent(0);
-      setCustomDiscountPercent("");
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const clearReceipt = async () => {
+    if (receiptItems.length === 0 || returnReceiptStock.isPending) return;
+    const result = await returnReceiptStock.mutateAsync(receiptItems);
+    resetReceipt();
+    if (result.restored > 0) {
+      toast.success(`Returned ${result.restored} item(s) to inventory`);
+    }
+  };
+
+  const removeOneReceiptItem = async (item: ReceiptLine, index: number) => {
+    if (returnReceiptStock.isPending) return;
+    const result = await returnReceiptStock.mutateAsync([
+      { product_id: item.product_id, quantity: 1 },
+    ]);
+    setReceiptItems((prev) =>
+      prev.flatMap((line, lineIndex) => {
+        if (lineIndex !== index) return [line];
+        if (line.quantity <= 1) return [];
+        return [{ ...line, quantity: line.quantity - 1 }];
+      }),
+    );
+    if (result.restored > 0) {
+      toast.success("Returned 1 item to inventory");
+    }
+  };
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -456,15 +497,11 @@ function Inventory() {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setReceiptItems([]);
-                setDiscountMode("none");
-                setDiscountPercent(0);
-                setCustomDiscountPercent("");
-              }}
+              disabled={returnReceiptStock.isPending}
+              onClick={() => void clearReceipt()}
             >
               <Trash2 className="size-4 mr-1.5" />
-              Clear
+              {returnReceiptStock.isPending ? "Returning..." : "Clear"}
             </Button>
           )}
         </div>
@@ -482,19 +519,32 @@ function Inventory() {
                     <th className="py-1 pr-2 font-medium">Qty</th>
                     <th className="py-1 pr-2 font-medium">Description</th>
                     <th className="py-1 pr-2 text-right font-medium">Price</th>
-                    <th className="py-1 text-right font-medium">Total</th>
+                    <th className="py-1 pr-2 text-right font-medium">Total</th>
+                    <th className="py-1 text-right font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {receiptItems.map((item) => (
+                  {receiptItems.map((item, index) => (
                     <tr key={item.product_id ?? item.description}>
                       <td className="py-1.5 pr-2 tabular-nums">{item.quantity}</td>
                       <td className="py-1.5 pr-2">{item.description}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums">
                         {money(item.unit_price)}
                       </td>
-                      <td className="py-1.5 text-right tabular-nums">
+                      <td className="py-1.5 pr-2 text-right tabular-nums">
                         {money(item.quantity * item.unit_price)}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={returnReceiptStock.isPending}
+                          onClick={() => void removeOneReceiptItem(item, index)}
+                        >
+                          <RotateCcw className="size-4 mr-1.5" />
+                          Remove 1
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -505,7 +555,7 @@ function Inventory() {
               Subtotal: {money(receiptSubtotal)}
             </div>
             <div className="space-y-2">
-              <Label>Discount</Label>
+              <Label>Apply discount</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -573,14 +623,6 @@ function Inventory() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="customer-name">Customer name (optional)</Label>
-                <Input
-                  id="customer-name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
                 <Label htmlFor="cash-paid">Cash paid (optional)</Label>
                 <Input
                   id="cash-paid"
@@ -594,7 +636,7 @@ function Inventory() {
             <Button
               type="button"
               className="w-full sm:w-auto"
-              disabled={saveReceipt.isPending}
+              disabled={saveReceipt.isPending || returnReceiptStock.isPending}
               onClick={() => saveReceipt.mutate()}
             >
               <Printer className="size-4 mr-1.5" />

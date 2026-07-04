@@ -48,7 +48,12 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-export type ProductDefault = Partial<Values> & { id?: string; images?: string[] };
+export type ProductDefault = Partial<Values> & {
+  id?: string;
+  images?: string[];
+  category_id?: string | null;
+  key_category?: string | null;
+};
 
 const readImage = (file: File) =>
   new Promise<string>((resolve, reject) => {

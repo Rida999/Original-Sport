@@ -93,3 +93,71 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
     if (existing) return { status: "out_of_stock" as const, product: existing };
     return { status: "not_found" as const, barcode };
   });
+
+export const restoreReceiptStock = createServerFn({ method: "POST" })
+  .validator((data: { items: { product_id: string | null; quantity: number }[] }) => data)
+  .handler(async ({ data }) => {
+    const items = data.items
+      .filter((item) => item.product_id && Number(item.quantity) > 0)
+      .map((item) => ({
+        product_id: item.product_id as string,
+        quantity: Math.max(1, Math.floor(Number(item.quantity))),
+      }));
+
+    if (items.length === 0) return { restored: 0 };
+
+    const { getPool } = await import("./db.server");
+    const client = await getPool().connect();
+
+    try {
+      await client.query("begin");
+      let restored = 0;
+
+      for (const item of items) {
+        const result = await client.query<{
+          id: string;
+          barcode: string;
+          name: string;
+          previous_quantity: number;
+          quantity: number;
+        }>(
+          `update products
+           set quantity = quantity + $2,
+               status = case
+                 when status = 'out_of_stock' then 'available'::product_status
+                 else status
+               end
+           where id = $1
+           returning id, barcode, name, quantity - $2 as previous_quantity, quantity`,
+          [item.product_id, item.quantity],
+        );
+
+        const product = result.rows[0];
+        if (!product) continue;
+
+        restored += item.quantity;
+        await client.query(
+          "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4)",
+          [
+            "receipt_item_returned",
+            "product",
+            product.id,
+            {
+              barcode: product.barcode,
+              previous_quantity: product.previous_quantity,
+              quantity: product.quantity,
+              returned_quantity: item.quantity,
+            },
+          ],
+        );
+      }
+
+      await client.query("commit");
+      return { restored };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
