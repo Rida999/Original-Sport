@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Camera,
+  ChevronDown,
   Printer,
   RotateCcw,
   ScanLine,
@@ -117,6 +118,7 @@ function Inventory() {
   const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">("none");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [customDiscountPercent, setCustomDiscountPercent] = useState("");
+  const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
@@ -648,29 +650,49 @@ function Inventory() {
 
       {recentReceipts && recentReceipts.length > 0 && (
         <Card className="p-4 space-y-2">
-          <div className="text-sm font-medium">Recent receipts</div>
-          <div className="divide-y divide-border">
-            {recentReceipts.map((receipt) => (
-              <div key={receipt.id} className="flex items-center justify-between py-2 text-sm">
-                <div>
-                  <span className="font-medium">#{receipt.invoice_number}</span>{" "}
-                  <span className="text-muted-foreground">
-                    {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
-                    {new Date(receipt.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
-                >
-                  <Printer className="size-4 mr-1.5" />
-                  Print
-                </Button>
-              </div>
-            ))}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Recent receipts</div>
+              <p className="text-xs text-muted-foreground">
+                {recentReceipts.length} saved receipt(s)
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setRecentReceiptsOpen((open) => !open)}
+            >
+              <ChevronDown
+                className={`size-4 transition-transform ${recentReceiptsOpen ? "rotate-180" : ""}`}
+              />
+              {recentReceiptsOpen ? "Hide" : "Show"}
+            </Button>
           </div>
+          {recentReceiptsOpen && (
+            <div className="divide-y divide-border">
+              {recentReceipts.map((receipt) => (
+                <div key={receipt.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium">#{receipt.invoice_number}</span>{" "}
+                    <span className="text-muted-foreground">
+                      {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
+                      {new Date(receipt.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
+                  >
+                    <Printer className="size-4 mr-1.5" />
+                    Print
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
