@@ -7,10 +7,17 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
   return query<
     Pick<
       Product,
-      "id" | "barcode" | "article_number" | "name" | "quantity" | "min_stock" | "updated_at"
+      | "id"
+      | "barcode"
+      | "article_number"
+      | "name"
+      | "quantity"
+      | "min_stock"
+      | "selling_price"
+      | "updated_at"
     >
   >(
-    "select id, barcode, article_number, name, quantity, min_stock, updated_at from products where quantity > 0 order by updated_at desc",
+    "select id, barcode, article_number, name, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 
