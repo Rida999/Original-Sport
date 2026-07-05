@@ -518,7 +518,7 @@ function ProductsList() {
                 <th className="p-3 font-medium">Article number</th>
                 <th className="p-3 font-medium">Category</th>
                 <th className="p-3 font-medium">Gender</th>
-                <th className="p-3 font-medium text-right">Price</th>
+                <th className="p-3 font-medium text-right">Retail Price</th>
                 <th className="p-3 font-medium text-right">Stock</th>
                 <th className="p-3 font-medium">Status</th>
                 <th className="p-3 w-12"></th>

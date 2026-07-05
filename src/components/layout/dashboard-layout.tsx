@@ -111,7 +111,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline">{nightMode ? "Day" : "Night"}</span>
           </Button>
         </header>
-        <main className="flex-1 p-4 lg:p-6 max-w-screen-2xl w-full mx-auto">{children}</main>
+        <main className="flex-1 p-4 lg:p-6 2xl:p-10 max-w-[1920px] w-full mx-auto">{children}</main>
       </div>
     </div>
   );

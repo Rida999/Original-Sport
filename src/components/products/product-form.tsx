@@ -2,9 +2,8 @@ import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { listCategoryOptions } from "@/server/categories";
 import { saveProduct } from "@/server/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,8 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { generateBarcode } from "@/lib/format";
-import { Upload, X, Wand2 } from "lucide-react";
+import { Upload, X } from "lucide-react";
 
 const schema = z.object({
   barcode: z.string().min(3, "Required"),
@@ -104,11 +102,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
     },
   });
 
-  const { data: categories } = useQuery({
-    queryKey: ["categories-list"],
-    queryFn: async () => listCategoryOptions(),
-  });
-
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
@@ -169,28 +162,16 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           <h2 className="font-semibold">Basics</h2>
           <div className="space-y-1.5">
             <Label htmlFor="barcode">Article number</Label>
-            <div className="flex gap-2">
-              <Input
-                id="barcode"
-                autoFocus
-                {...register("barcode")}
-                ref={(el) => {
-                  register("barcode").ref(el);
-                  barcodeRef.current = el;
-                }}
-                placeholder="Scan or type article number..."
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const code = generateBarcode();
-                  setValue("barcode", code, { shouldValidate: true });
-                }}
-              >
-                <Wand2 className="size-4 mr-1.5" /> Generate
-              </Button>
-            </div>
+            <Input
+              id="barcode"
+              autoFocus
+              {...register("barcode")}
+              ref={(el) => {
+                register("barcode").ref(el);
+                barcodeRef.current = el;
+              }}
+              placeholder="Scan or type article number..."
+            />
             {errors.barcode && <p className="text-xs text-destructive">{errors.barcode.message}</p>}
             <p className="text-xs text-muted-foreground">
               Scanners auto-fill this field when focused.
@@ -202,29 +183,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <Field label="Secondary article number">
-              <Input {...register("article_number")} />
-            </Field>
-            <Field label="Model name">
-              <Input {...register("model_name")} />
-            </Field>
-            <Field label="Category">
-              <Select
-                value={watch("category_id") ?? ""}
-                onValueChange={(v) => setValue("category_id", v || null)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
             <Field label="Key category">
               <Input {...register("key_category")} />
             </Field>
@@ -247,12 +205,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Sport">
-              <Input {...register("sport")} placeholder="Running, Basketball…" />
-            </Field>
-            <Field label="Marketing line">
-              <Input {...register("marketing_line")} />
-            </Field>
             <Field label="Product division">
               <Input {...register("product_division")} />
             </Field>
@@ -261,9 +213,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             </Field>
             <Field label="Product type">
               <Input {...register("product_type")} />
-            </Field>
-            <Field label="Sub brand">
-              <Input {...register("sub_brand")} />
             </Field>
             <Field label="Color">
               <Input {...register("color")} />
