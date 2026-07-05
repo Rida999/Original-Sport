@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardStats } from "@/server/dashboard";
 import { Card } from "@/components/ui/card";
-import { Package, AlertTriangle, XCircle, Clock } from "lucide-react";
+import { Package, XCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -24,12 +24,6 @@ function Dashboard() {
       accent: "text-primary",
     },
     {
-      label: "Low Stock",
-      value: data?.lowStockCount ?? 0,
-      icon: AlertTriangle,
-      accent: "text-warning",
-    },
-    {
       label: "Out of Stock",
       value: data?.outOfStockCount ?? 0,
       icon: XCircle,
@@ -44,7 +38,7 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">Overview of your inventory</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
             <div className="flex items-center justify-between">
@@ -116,22 +110,6 @@ function Dashboard() {
           )}
         </Card>
       </div>
-
-      {(data?.lowStock.length ?? 0) > 0 && (
-        <Card className="p-4">
-          <h2 className="font-semibold text-sm mb-3 flex items-center gap-2">
-            <AlertTriangle className="size-4 text-warning" /> Low stock alerts
-          </h2>
-          <ul className="divide-y divide-border">
-            {data!.lowStock.map((p) => (
-              <li key={p.id} className="py-2 flex items-center justify-between text-sm">
-                <span>{p.name}</span>
-                <span className="text-warning tabular-nums">{p.quantity} left</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
     </div>
   );
 }

@@ -27,7 +27,6 @@ function Reports() {
       "Article number",
       "Name",
       "Quantity",
-      "Min stock",
       "Purchase price",
       "Selling price",
     ];
@@ -35,7 +34,6 @@ function Reports() {
       p.article_number ?? p.barcode,
       p.name,
       p.quantity,
-      p.min_stock,
       p.purchase_price,
       p.selling_price,
     ]);
@@ -51,7 +49,6 @@ function Reports() {
 
   const total = data?.reduce((sum, p) => sum + Number(p.selling_price) * p.quantity, 0) ?? 0;
   const cost = data?.reduce((sum, p) => sum + Number(p.purchase_price) * p.quantity, 0) ?? 0;
-  const lowStock = data?.filter((p) => p.quantity > 0 && p.quantity <= p.min_stock).length ?? 0;
   const outOfStock = data?.filter((p) => p.quantity === 0).length ?? 0;
 
   return (
@@ -66,7 +63,7 @@ function Reports() {
         </Button>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid sm:grid-cols-3 gap-3">
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">Inventory value (retail)</div>
           <div className="text-2xl font-semibold mt-2">{money(total)}</div>
@@ -74,10 +71,6 @@ function Reports() {
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">Inventory cost</div>
           <div className="text-2xl font-semibold mt-2">{money(cost)}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground">Low stock items</div>
-          <div className="text-2xl font-semibold mt-2 text-warning">{lowStock}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">Out of stock</div>

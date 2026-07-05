@@ -793,13 +793,12 @@ function Inventory() {
           <div className="p-10 text-center text-muted-foreground">No items.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
                   <th className="p-3 font-medium text-right">Current</th>
-                  <th className="p-3 font-medium text-right">Minimum</th>
                   <th className="p-3 font-medium">Status</th>
                   <th className="p-3 font-medium">Last updated</th>
                 </tr>
@@ -812,15 +811,10 @@ function Inventory() {
                           label: "Out of stock",
                           cls: "bg-destructive/15 text-destructive border-destructive/30",
                         }
-                      : p.quantity <= p.min_stock
-                        ? {
-                            label: "Low stock",
-                            cls: "bg-warning/15 text-warning border-warning/30",
-                          }
-                        : {
-                            label: "Available",
-                            cls: "bg-success/15 text-success border-success/30",
-                          };
+                      : {
+                          label: "Available",
+                          cls: "bg-success/15 text-success border-success/30",
+                        };
                   return (
                     <tr key={p.id} className="hover:bg-muted/30">
                       <td className="p-3 font-mono text-xs text-muted-foreground">
@@ -828,9 +822,6 @@ function Inventory() {
                       </td>
                       <td className="p-3 font-medium">{p.name}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
-                      <td className="p-3 text-right tabular-nums text-muted-foreground">
-                        {p.min_stock}
-                      </td>
                       <td className="p-3">
                         <Badge variant="outline" className={status.cls}>
                           {status.label}

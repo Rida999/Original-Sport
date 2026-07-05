@@ -548,15 +548,11 @@ function ProductsList() {
                 const status =
                   p.quantity === 0
                     ? "Out of stock"
-                    : p.quantity <= p.min_stock
-                      ? "Low stock"
-                      : "Available";
+                    : "Available";
                 const variant =
                   p.quantity === 0
                     ? "destructive"
-                    : p.quantity <= p.min_stock
-                      ? "warning"
-                      : "default";
+                    : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
                     <td className="p-3">

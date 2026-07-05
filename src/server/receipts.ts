@@ -151,7 +151,7 @@ export const listRecentReceipts = createServerFn({ method: "GET" }).handler(asyn
      left join receipt_items ri on ri.receipt_id = r.id
      group by r.id
      order by r.created_at desc
-     limit 10`,
+     limit 5`,
   );
   return rows.map(toReceipt);
 });
