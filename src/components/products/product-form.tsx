@@ -52,7 +52,7 @@ const schema = z.object({
     .int("Quantity must be a whole number")
     .min(0, "Quantity cannot be negative"),
   min_stock: z.coerce.number().int().min(0),
-  description: z.string().max(100, "Description must be at most 100 characters").optional(),
+  description: z.string().max(200, "Description must be at most 200 characters").optional(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -249,7 +249,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" rows={4} maxLength={100} {...register("description")} />
+            <Textarea id="description" rows={4} maxLength={200} {...register("description")} />
             {errors.description && (
               <p className="text-xs text-destructive">{errors.description.message}</p>
             )}

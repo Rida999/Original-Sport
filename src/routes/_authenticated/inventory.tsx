@@ -108,7 +108,7 @@ const textCodeFromOcr = (text: string) => {
   return cleaned[0] ?? "";
 };
 
-const discountOptions = [15, 20, 25] as const;
+const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
 
 const readReceiptDraft = (): ReceiptDraft | null => {
@@ -197,7 +197,9 @@ function Inventory() {
     0,
   );
   const activeDiscountPercent =
-    discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
+    discountMode === "custom"
+      ? Math.min(100, Math.max(0, Number(customDiscountPercent) || 0))
+      : discountPercent;
   const discountAmount = Math.min(
     receiptSubtotal,
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
@@ -707,7 +709,14 @@ function Inventory() {
                   placeholder="Percent"
                   type="number"
                   value={customDiscountPercent}
-                  onChange={(e) => setCustomDiscountPercent(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setCustomDiscountPercent("");
+                      return;
+                    }
+                    setCustomDiscountPercent(String(Math.min(100, Math.max(0, Number(value)))));
+                  }}
                 />
               )}
               {discountAmount > 0 && (
