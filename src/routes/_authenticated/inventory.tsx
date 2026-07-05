@@ -456,6 +456,10 @@ function Inventory() {
   const handleScan = () => {
     const articleNumber = scanCode.trim();
     if (!articleNumber || adjustStock.isPending) return;
+    if (!/^\d{1,20}$/.test(articleNumber)) {
+      toast.error("Article number must contain at most 20 digits.");
+      return;
+    }
     adjustStock.mutate({ article_number: articleNumber, mode: scanMode });
   };
 
@@ -520,6 +524,8 @@ function Inventory() {
                 placeholder="Scan text"
                 value={scanCode}
                 autoComplete="off"
+                inputMode="numeric"
+                maxLength={20}
                 onChange={(e) => setScanCode(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {

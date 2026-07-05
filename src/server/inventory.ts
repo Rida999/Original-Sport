@@ -25,6 +25,9 @@ export const adjustProductStockByArticleNumber = createServerFn({ method: "POST"
   .handler(async ({ data }) => {
     const articleNumber = data.article_number.trim();
     if (!articleNumber) throw new Error("Article number is required.");
+    if (!/^\d{1,20}$/.test(articleNumber)) {
+      throw new Error("Article number must contain at most 20 digits.");
+    }
 
     const { one } = await import("./db.server");
     if (data.mode === "return") {
