@@ -36,10 +36,6 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
         <span>Currency Name</span>
         <span>USD</span>
       </div>
-      <div className="flex justify-between">
-        <span>Customer Name</span>
-        <span>{receipt.customer_name || ""}</span>
-      </div>
 
       <div className="my-2 border-t border-dashed border-black" />
 
@@ -68,7 +64,7 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <div className="flex justify-between">
         <span>Qty</span>
-        <span>Apply discount</span>
+        <span>Discount</span>
         <span>Total TTC</span>
       </div>
       <div className="flex justify-between font-semibold">

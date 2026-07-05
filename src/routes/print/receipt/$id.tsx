@@ -18,14 +18,25 @@ export const Route = createFileRoute("/print/receipt/$id")({
 function PrintReceiptPage() {
   const { id } = Route.useParams();
   const printedRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const { data: receipt, isError } = useQuery({
     queryKey: ["print-receipt", id],
     queryFn: async () => getReceipt({ data: { id } }),
   });
 
   useEffect(() => {
-    if (!receipt || printedRef.current) return;
+    if (!receipt || printedRef.current || !contentRef.current) return;
     printedRef.current = true;
+
+    // Size the printed page to the receipt's actual rendered height (plus a
+    // small buffer) instead of a fixed length - otherwise every receipt prints
+    // on a full fixed-length page with a big blank gap before the page ends.
+    const heightPx = contentRef.current.offsetHeight;
+    const heightMm = Math.ceil((heightPx * 25.4) / 96) + 5;
+    const pageSizeStyle = document.createElement("style");
+    pageSizeStyle.textContent = `@media print { @page { size: 80mm ${heightMm}mm; margin: 0; } }`;
+    document.head.appendChild(pageSizeStyle);
+
     const timer = window.setTimeout(() => window.print(), 150);
     return () => window.clearTimeout(timer);
   }, [receipt]);
@@ -37,5 +48,9 @@ function PrintReceiptPage() {
     return <div className="p-6 text-center text-sm text-muted-foreground">Loading receipt…</div>;
   }
 
-  return <ReceiptPrintView receipt={receipt} />;
+  return (
+    <div ref={contentRef}>
+      <ReceiptPrintView receipt={receipt} />
+    </div>
+  );
 }

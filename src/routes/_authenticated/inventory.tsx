@@ -201,6 +201,7 @@ function Inventory() {
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
   );
   const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
+  const changeDue = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
 
   const resetReceipt = () => {
     setReceiptItems([]);
@@ -726,6 +727,11 @@ function Inventory() {
                 />
               </div>
             </div>
+            {cashPaid.trim().length > 0 && (
+              <div className="flex justify-end text-sm font-semibold">
+                Change: {money(changeDue)}
+              </div>
+            )}
             <Button
               type="button"
               className="w-full sm:w-auto"
