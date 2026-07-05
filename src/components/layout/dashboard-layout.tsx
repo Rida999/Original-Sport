@@ -8,10 +8,12 @@ import {
   BarChart3,
   Receipt,
   Menu,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -22,11 +24,27 @@ const nav = [
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ] as const;
 
+const THEME_STORAGE_KEY = "original-sport-theme";
+
+const getInitialNightMode = () => {
+  if (typeof window === "undefined") return false;
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === "dark") return true;
+  if (stored === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+};
+
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const [nightMode, setNightMode] = useState(getInitialNightMode);
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", nightMode);
+    window.localStorage.setItem(THEME_STORAGE_KEY, nightMode ? "dark" : "light");
+  }, [nightMode]);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -81,6 +99,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           <div className="text-sm text-muted-foreground capitalize">
             {pathname.replace("/", "").split("/")[0] || "Dashboard"}
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto h-9 gap-2"
+            aria-label={nightMode ? "Switch to day mode" : "Switch to night mode"}
+            onClick={() => setNightMode((enabled) => !enabled)}
+          >
+            {nightMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            <span className="hidden sm:inline">{nightMode ? "Day" : "Night"}</span>
+          </Button>
         </header>
         <main className="flex-1 p-4 lg:p-6 max-w-screen-2xl w-full mx-auto">{children}</main>
       </div>
