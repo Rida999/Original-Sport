@@ -545,7 +545,7 @@ function Inventory() {
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
-          <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="min-w-0 flex-1 max-w-sm space-y-1.5">
             <label htmlFor="stock-scan" className="text-sm font-medium">
               Article number
             </label>

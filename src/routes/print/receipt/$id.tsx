@@ -32,7 +32,7 @@ function PrintReceiptPage() {
     // small buffer) instead of a fixed length - otherwise every receipt prints
     // on a full fixed-length page with a big blank gap before the page ends.
     const heightPx = contentRef.current.offsetHeight;
-    const heightMm = Math.ceil((heightPx * 25.4) / 96) + 5;
+    const heightMm = Math.ceil((heightPx * 25.4) / 96) + 15;
     const pageSizeStyle = document.createElement("style");
     pageSizeStyle.textContent = `@media print { @page { size: 80mm ${heightMm}mm; margin: 0; } }`;
     document.head.appendChild(pageSizeStyle);
