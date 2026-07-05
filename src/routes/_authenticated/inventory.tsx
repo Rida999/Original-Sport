@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adjustProductStockByBarcode, listInventory, restoreReceiptStock } from "@/server/inventory";
 import { createReceipt, listRecentReceipts } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -798,41 +797,25 @@ function Inventory() {
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
+                  <th className="p-3 font-medium text-right">Price</th>
                   <th className="p-3 font-medium text-right">Current</th>
-                  <th className="p-3 font-medium">Status</th>
                   <th className="p-3 font-medium">Last updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((p) => {
-                  const status =
-                    p.quantity === 0
-                      ? {
-                          label: "Out of stock",
-                          cls: "bg-destructive/15 text-destructive border-destructive/30",
-                        }
-                      : {
-                          label: "Available",
-                          cls: "bg-success/15 text-success border-success/30",
-                        };
-                  return (
+                {filtered.map((p) => (
                     <tr key={p.id} className="hover:bg-muted/30">
                       <td className="p-3 font-mono text-xs text-muted-foreground">
                         {p.article_number ?? p.barcode}
                       </td>
                       <td className="p-3 font-medium">{p.name}</td>
+                      <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
-                      <td className="p-3">
-                        <Badge variant="outline" className={status.cls}>
-                          {status.label}
-                        </Badge>
-                      </td>
                       <td className="p-3 text-muted-foreground text-xs">
                         {new Date(p.updated_at).toLocaleString()}
                       </td>
                     </tr>
-                  );
-                })}
+                  ))}
               </tbody>
             </table>
           </div>
