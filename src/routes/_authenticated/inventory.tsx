@@ -13,6 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Camera,
   ChevronDown,
   Printer,
@@ -148,6 +155,7 @@ const readReceiptDraft = (): ReceiptDraft | null => {
 
 function Inventory() {
   const [q, setQ] = useState("");
+  const [brandFilter, setBrandFilter] = useState("all");
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
   const [cameraActive, setCameraActive] = useState(false);
@@ -199,16 +207,25 @@ function Inventory() {
     lastPushedDraftRef.current = JSON.stringify(items);
     syncDraft.mutate(items);
   };
+  const brandOptions = useMemo(() => {
+    const brands = new Set<string>();
+    for (const p of data ?? []) {
+      if (p.sub_brand) brands.add(p.sub_brand);
+    }
+    return Array.from(brands).sort((a, b) => a.localeCompare(b));
+  }, [data]);
   const filtered = useMemo(
     () =>
-      (data ?? []).filter(
-        (p) =>
-          !q ||
+      (data ?? []).filter((p) => {
+        if (brandFilter !== "all" && p.sub_brand !== brandFilter) return false;
+        if (!q) return true;
+        return (
           p.name.toLowerCase().includes(q.toLowerCase()) ||
           p.barcode.includes(q) ||
-          p.article_number?.includes(q),
-      ),
-    [data, q],
+          p.article_number?.includes(q)
+        );
+      }),
+    [data, q, brandFilter],
   );
   const receiptSubtotal = receiptItems.reduce(
     (sum, item) => sum + item.quantity * item.unit_price,
@@ -834,14 +851,29 @@ function Inventory() {
         </Card>
       )}
 
-      <div className="relative w-full sm:max-w-md">
-        <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Search…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <Select value={brandFilter} onValueChange={setBrandFilter}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All brands" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All brands</SelectItem>
+            {brandOptions.map((brand) => (
+              <SelectItem key={brand} value={brand}>
+                {brand}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <Card className="overflow-hidden">
         {filtered.length === 0 ? (
@@ -853,6 +885,7 @@ function Inventory() {
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
+                  <th className="p-3 font-medium">Brand</th>
                   <th className="p-3 font-medium text-right">Retail Price</th>
                   <th className="p-3 font-medium text-right">Current</th>
                   <th className="p-3 font-medium">Last updated</th>
@@ -865,6 +898,7 @@ function Inventory() {
                         {p.article_number ?? p.barcode}
                       </td>
                       <td className="p-3 font-medium">{p.name}</td>
+                      <td className="p-3 text-muted-foreground">{p.sub_brand ?? "-"}</td>
                       <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
                       <td className="p-3 text-muted-foreground text-xs">

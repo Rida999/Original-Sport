@@ -183,6 +183,9 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
+            <Field label="Brand">
+              <Input {...register("sub_brand")} placeholder="Adidas, Nike, Puma…" />
+            </Field>
             <Field label="Key category">
               <Input {...register("key_category")} />
             </Field>
