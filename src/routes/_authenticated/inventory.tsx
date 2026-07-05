@@ -817,7 +817,7 @@ function Inventory() {
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
-                  <th className="p-3 font-medium text-right">Price</th>
+                  <th className="p-3 font-medium text-right">Retail Price</th>
                   <th className="p-3 font-medium text-right">Current</th>
                   <th className="p-3 font-medium">Last updated</th>
                 </tr>
