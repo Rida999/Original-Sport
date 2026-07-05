@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adjustProductStockByBarcode, listInventory, restoreReceiptStock } from "@/server/inventory";
-import { createReceipt, listRecentReceipts } from "@/server/receipts";
+import {
+  createReceipt,
+  getDraftReceipt,
+  listRecentReceipts,
+  saveDraftReceipt,
+} from "@/server/receipts";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -156,6 +161,7 @@ function Inventory() {
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
   const printWindowRef = useRef<Window | null>(null);
+  const lastPushedDraftRef = useRef("");
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
     () => readReceiptDraft()?.items ?? [],
   );
@@ -179,6 +185,20 @@ function Inventory() {
     queryKey: ["recent-receipts"],
     queryFn: async () => listRecentReceipts(),
   });
+  // Shared with any other device (e.g. a monitor) looking at this same page -
+  // whichever device scans pushes here, everyone else picks it up on poll.
+  const { data: draftReceipt } = useQuery({
+    queryKey: ["draft-receipt"],
+    queryFn: async () => getDraftReceipt(),
+    refetchInterval: 1500,
+  });
+  const syncDraft = useMutation({
+    mutationFn: async (items: ReceiptLine[]) => saveDraftReceipt({ data: { items } }),
+  });
+  const pushDraft = (items: ReceiptLine[]) => {
+    lastPushedDraftRef.current = JSON.stringify(items);
+    syncDraft.mutate(items);
+  };
   const filtered = useMemo(
     () =>
       (data ?? []).filter(
@@ -205,6 +225,7 @@ function Inventory() {
 
   const resetReceipt = () => {
     setReceiptItems([]);
+    pushDraft([]);
     setCashPaid("");
     setDiscountMode("none");
     setDiscountPercent(0);
@@ -235,19 +256,21 @@ function Inventory() {
           const product = result.product;
           setReceiptItems((prev) => {
             const idx = prev.findIndex((item) => item.product_id === product.id);
-            if (idx === -1) {
-              return [
-                ...prev,
-                {
-                  product_id: product.id,
-                  description: product.name,
-                  quantity: 1,
-                  unit_price: Number(product.selling_price),
-                },
-              ];
-            }
-            const next = [...prev];
-            next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+            const next =
+              idx === -1
+                ? [
+                    ...prev,
+                    {
+                      product_id: product.id,
+                      description: product.name,
+                      quantity: 1,
+                      unit_price: Number(product.selling_price),
+                    },
+                  ]
+                : prev.map((line, lineIndex) =>
+                    lineIndex === idx ? { ...line, quantity: line.quantity + 1 } : line,
+                  );
+            pushDraft(next);
             return next;
           });
         }
@@ -318,13 +341,15 @@ function Inventory() {
     const result = await returnReceiptStock.mutateAsync([
       { product_id: item.product_id, quantity: 1 },
     ]);
-    setReceiptItems((prev) =>
-      prev.flatMap((line, lineIndex) => {
+    setReceiptItems((prev) => {
+      const next = prev.flatMap((line, lineIndex) => {
         if (lineIndex !== index) return [line];
         if (line.quantity <= 1) return [];
         return [{ ...line, quantity: line.quantity - 1 }];
-      }),
-    );
+      });
+      pushDraft(next);
+      return next;
+    });
     if (result.restored > 0) {
       toast.success("Returned 1 item to inventory");
     }
@@ -356,6 +381,17 @@ function Inventory() {
       } satisfies ReceiptDraft),
     );
   }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
+
+  useEffect(() => {
+    if (!draftReceipt) return;
+    const fetched = JSON.stringify(draftReceipt.items);
+    // Skip if this is just the poll echoing back what we ourselves last
+    // pushed - only adopt it when some other device changed the shared draft.
+    if (fetched === lastPushedDraftRef.current) return;
+    if (fetched === JSON.stringify(receiptItems)) return;
+    lastPushedDraftRef.current = fetched;
+    setReceiptItems(draftReceipt.items);
+  }, [draftReceipt]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
