@@ -8,7 +8,6 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
     Pick<
       Product,
       | "id"
-      | "barcode"
       | "article_number"
       | "name"
       | "quantity"
@@ -17,20 +16,20 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
       | "updated_at"
     >
   >(
-    "select id, barcode, article_number, name, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
+    "select id, article_number, name, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 
-export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
-  .validator((data: { barcode: string; mode: "remove" | "return" }) => data)
+export const adjustProductStockByArticleNumber = createServerFn({ method: "POST" })
+  .validator((data: { article_number: string; mode: "remove" | "return" }) => data)
   .handler(async ({ data }) => {
-    const barcode = data.barcode.trim();
-    if (!barcode) throw new Error("Article number is required.");
+    const articleNumber = data.article_number.trim();
+    if (!articleNumber) throw new Error("Article number is required.");
 
     const { one } = await import("./db.server");
     if (data.mode === "return") {
       const returned = await one<
-        Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock"> & {
+        Pick<Product, "id" | "article_number" | "name" | "quantity" | "min_stock"> & {
           previous_quantity: number;
         }
       >(
@@ -40,12 +39,12 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
                when status = 'out_of_stock' then 'available'::product_status
                else status
              end
-         where barcode = $1 or article_number = $1
-         returning id, barcode, name, quantity - 1 as previous_quantity, quantity, min_stock`,
-        [barcode],
+         where article_number = $1
+         returning id, article_number, name, quantity - 1 as previous_quantity, quantity, min_stock`,
+        [articleNumber],
       );
 
-      if (!returned) return { status: "not_found" as const, barcode };
+      if (!returned) return { status: "not_found" as const, article_number: articleNumber };
 
       await one(
         "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
@@ -54,7 +53,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
           "product",
           returned.id,
           {
-            barcode: returned.barcode,
+            article_number: returned.article_number,
             previous_quantity: returned.previous_quantity,
             quantity: returned.quantity,
           },
@@ -64,7 +63,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
     }
 
     const updated = await one<
-      Pick<Product, "id" | "barcode" | "name" | "quantity" | "min_stock" | "selling_price"> & {
+      Pick<Product, "id" | "article_number" | "name" | "quantity" | "min_stock" | "selling_price"> & {
         previous_quantity: number;
       }
     >(
@@ -75,9 +74,9 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
              when status = 'out_of_stock' then 'available'::product_status
              else status
            end
-       where (barcode = $1 or article_number = $1) and quantity > 0
-       returning id, barcode, name, quantity + 1 as previous_quantity, quantity, min_stock, selling_price`,
-      [barcode],
+       where article_number = $1 and quantity > 0
+       returning id, article_number, name, quantity + 1 as previous_quantity, quantity, min_stock, selling_price`,
+      [articleNumber],
     );
 
     if (updated) {
@@ -88,7 +87,7 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
           "product",
           updated.id,
           {
-            barcode: updated.barcode,
+            article_number: updated.article_number,
             previous_quantity: updated.previous_quantity,
             quantity: updated.quantity,
           },
@@ -97,13 +96,13 @@ export const adjustProductStockByBarcode = createServerFn({ method: "POST" })
       return { status: "updated" as const, mode: data.mode, product: updated };
     }
 
-    const existing = await one<Pick<Product, "id" | "barcode" | "name" | "quantity">>(
-      "select id, barcode, name, quantity from products where barcode = $1 or article_number = $1",
-      [barcode],
+    const existing = await one<Pick<Product, "id" | "article_number" | "name" | "quantity">>(
+      "select id, article_number, name, quantity from products where article_number = $1",
+      [articleNumber],
     );
 
     if (existing) return { status: "out_of_stock" as const, product: existing };
-    return { status: "not_found" as const, barcode };
+    return { status: "not_found" as const, article_number: articleNumber };
   });
 
 export const restoreReceiptStock = createServerFn({ method: "POST" })
@@ -128,7 +127,7 @@ export const restoreReceiptStock = createServerFn({ method: "POST" })
       for (const item of items) {
         const result = await client.query<{
           id: string;
-          barcode: string;
+          article_number: string;
           name: string;
           previous_quantity: number;
           quantity: number;
@@ -140,7 +139,7 @@ export const restoreReceiptStock = createServerFn({ method: "POST" })
                  else status
                end
            where id = $1
-           returning id, barcode, name, quantity - $2 as previous_quantity, quantity`,
+           returning id, article_number, name, quantity - $2 as previous_quantity, quantity`,
           [item.product_id, item.quantity],
         );
 
@@ -155,7 +154,7 @@ export const restoreReceiptStock = createServerFn({ method: "POST" })
             "product",
             product.id,
             {
-              barcode: product.barcode,
+              article_number: product.article_number,
               previous_quantity: product.previous_quantity,
               quantity: product.quantity,
               returned_quantity: item.quantity,

@@ -240,7 +240,6 @@ function ProductsList() {
         p.name,
         p.model_name,
         p.article_number,
-        p.barcode,
         p.product_type,
         p.product_line,
         p.category?.name,
@@ -291,7 +290,6 @@ function ProductsList() {
         const images = embeddedImage ? [embeddedImage] : sourceThumbnail ? [sourceThumbnail] : [];
 
         return {
-          barcode: articleNumber,
           article_number: articleNumber,
           name: modelName,
           model_name: modelName,
@@ -573,7 +571,7 @@ function ProductsList() {
                       </div>
                     </td>
                     <td className="p-3 font-mono text-xs text-muted-foreground">
-                      {p.article_number ?? p.barcode}
+                      {p.article_number}
                     </td>
                     <td className="p-3">{p.category?.name ?? "-"}</td>
                     <td className="p-3">{formatGender(p.gender)}</td>

@@ -32,8 +32,7 @@ function EditProduct() {
         <ProductForm
           initial={{
             id: data.id,
-            barcode: data.barcode,
-            article_number: data.article_number ?? undefined,
+            article_number: data.article_number,
             name: data.name,
             model_name: data.model_name ?? undefined,
             category_id: data.category_id,
