@@ -290,9 +290,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Field label="Quantity">
               <Input type="number" {...register("quantity")} />
             </Field>
-            <Field label="Minimum stock">
-              <Input type="number" {...register("min_stock")} />
-            </Field>
           </Card>
 
           <Card className="p-5 space-y-3">
