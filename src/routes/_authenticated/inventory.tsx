@@ -155,6 +155,7 @@ function Inventory() {
   const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
+  const printWindowRef = useRef<Window | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
     () => readReceiptDraft()?.items ?? [],
   );
@@ -286,12 +287,20 @@ function Inventory() {
       }),
     onSuccess: (receipt) => {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
-      window.open(`/print/receipt/${receipt.id}`, "_blank");
+      const printUrl = `/print/receipt/${receipt.id}`;
+      if (printWindowRef.current) {
+        printWindowRef.current.location.href = printUrl;
+      } else {
+        window.open(printUrl, "_blank");
+      }
       resetReceipt();
       invalidateStockQueries();
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      printWindowRef.current?.close();
+      toast.error(e.message);
+    },
   });
 
   const clearReceipt = async () => {
@@ -721,7 +730,12 @@ function Inventory() {
               type="button"
               className="w-full sm:w-auto"
               disabled={saveReceipt.isPending || returnReceiptStock.isPending}
-              onClick={() => saveReceipt.mutate()}
+              onClick={() => {
+                // Open the tab synchronously within the click handler - Safari
+                // blocks window.open() called later from an async onSuccess.
+                printWindowRef.current = window.open("about:blank", "_blank");
+                saveReceipt.mutate();
+              }}
             >
               <Printer className="size-4 mr-1.5" />
               {saveReceipt.isPending ? "Saving…" : "Save & Print"}
