@@ -498,13 +498,13 @@ function Inventory() {
               }}
               className="justify-start"
             >
-              <ToggleGroupItem value="remove" aria-label="Remove one item">
+              <ToggleGroupItem value="remove" aria-label="Sell one item">
                 <ShoppingCart className="size-4 mr-1.5" />
-                Remove
+                Sell
               </ToggleGroupItem>
-              <ToggleGroupItem value="return" aria-label="Add one item">
+              <ToggleGroupItem value="return" aria-label="Return one item">
                 <RotateCcw className="size-4 mr-1.5" />
-                Add
+                Return
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -545,7 +545,7 @@ function Inventory() {
             disabled={!scanCode.trim() || adjustStock.isPending}
             onClick={handleScan}
           >
-            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Add" : "Remove"}
+            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Return" : "Sell"}
           </Button>
         </div>
         {(cameraActive || cameraError) && (
