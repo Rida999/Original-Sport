@@ -14,26 +14,26 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
     >
       <div className="text-center space-y-1">
         <img src={logo} alt="Original Sport" className="mx-auto w-64 h-auto object-contain" />
-        <div className="text-xs font-normal text-black/70">MOF: 3256725-601</div>
-        <div className="text-xs font-normal text-black/70">Tyre-Shawaker St-Next to Oriental</div>
-        <div className="text-xs font-normal text-black/70">03/471489</div>
+        <div className="text-xs font-normal text-black">MOF: 3256725-601</div>
+        <div className="text-xs font-normal text-black">Tyre-Hosh Main Road</div>
+        <div className="text-xs font-normal text-black">03/471489</div>
       </div>
 
       <div className="mt-4 space-y-1 text-xs">
         <div className="flex justify-between">
-          <span className="text-black/60">Invoice #</span>
+          <span className="text-black">Invoice #</span>
           <span className="font-semibold">{receipt.invoice_number}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-black/60">Date</span>
+          <span className="text-black">Date</span>
           <span>{createdAt.toLocaleDateString()}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-black/60">Time</span>
+          <span className="text-black">Time</span>
           <span>{createdAt.toLocaleTimeString()}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-black/60">Currency</span>
+          <span className="text-black">Currency</span>
           <span>USD</span>
         </div>
       </div>
@@ -42,7 +42,7 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-black text-left uppercase tracking-wide text-black/60">
+          <tr className="border-b border-black text-left uppercase tracking-wide text-black">
             <th className="py-1 pr-1 font-medium">Qty</th>
             <th className="py-1 pr-1 font-medium">Description</th>
             <th className="py-1 pr-1 text-right font-medium">Price</th>
@@ -65,15 +65,15 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
-          <span className="text-black/60">Items</span>
+          <span className="text-black">Items</span>
           <span>{totalQuantity}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-black/60">Discount</span>
+          <span className="text-black">Discount</span>
           <span>{receipt.discount.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-black/60">V.A.T {receipt.vat_rate}%</span>
+          <span className="text-black">V.A.T {receipt.vat_rate}%</span>
           <span>{receipt.vat_amount.toFixed(2)}</span>
         </div>
       </div>
@@ -88,11 +88,11 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
       {showCashSummary && (
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-black/60">Paid</span>
+            <span className="text-black">Paid</span>
             <span className="font-semibold">{receipt.cash_paid.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-black/60">Change</span>
+            <span className="text-black">Change</span>
             <span className="font-semibold">{receipt.cash_exchange.toFixed(2)}</span>
           </div>
         </div>
@@ -102,11 +102,11 @@ export function ReceiptPrintView({ receipt }: { receipt: ReceiptWithItems }) {
 
       <div className="text-center space-y-1 text-xs">
         <div className="font-semibold">Thank you for shopping with us!</div>
-        <div className="flex items-center justify-center gap-1 text-black/70">
+        <div className="flex items-center justify-center gap-1 text-black">
           <Instagram className="size-3.5" />
           <span>@originalsport_tyre</span>
         </div>
-        <div className="mt-2 text-black/60">Exchange within 3 days. No refund.</div>
+        <div className="mt-2 text-black">Exchange within 3 days. No refund.</div>
       </div>
     </div>
   );
