@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import logo from "@/assets/logo.png";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -55,16 +56,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           open ? "translate-x-0 flex" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-          <div className="size-8 rounded-full border border-sidebar-border grid place-items-center shrink-0">
-            <span className="text-[10px] font-black tracking-tight text-sidebar-foreground">
-              OS
-            </span>
-          </div>
-          <span className="text-sm tracking-tight text-sidebar-foreground leading-none">
-            <span className="font-black uppercase">Original</span>{" "}
-            <span className="italic font-light">Sport</span>
-          </span>
+        <div className="h-24 flex items-center justify-center border-b border-sidebar-border p-2">
+          <img
+            src={logo}
+            alt="Original Sport"
+            className="h-full w-full object-contain dark:invert"
+          />
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           {nav.map(({ to, label, icon: Icon }) => (
