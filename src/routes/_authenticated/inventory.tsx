@@ -54,6 +54,7 @@ type ReceiptDraft = {
   discountMode: "none" | "preset" | "custom";
   discountPercent: number;
   customDiscountPercent: string;
+  discountOverride: string;
 };
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -147,6 +148,8 @@ const readReceiptDraft = (): ReceiptDraft | null => {
       discountPercent: Number(draft.discountPercent) || 0,
       customDiscountPercent:
         typeof draft.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+      discountOverride:
+        typeof draft.discountOverride === "string" ? draft.discountOverride : "",
     };
   } catch {
     return null;
@@ -182,6 +185,11 @@ function Inventory() {
   );
   const [customDiscountPercent, setCustomDiscountPercent] = useState(
     () => readReceiptDraft()?.customDiscountPercent ?? "",
+  );
+  // The percent buttons just fill this in as a suggestion - typing directly
+  // in the discount amount field (e.g. to round it) overrides that.
+  const [discountOverride, setDiscountOverride] = useState(
+    () => readReceiptDraft()?.discountOverride ?? "",
   );
   const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
@@ -233,12 +241,24 @@ function Inventory() {
   );
   const activeDiscountPercent =
     discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
-  const discountAmount = Math.min(
+  const suggestedDiscount = Math.min(
     receiptSubtotal,
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
   );
+  const discountAmount =
+    discountOverride.trim() !== ""
+      ? Math.min(receiptSubtotal, Math.max(0, Number(discountOverride) || 0))
+      : suggestedDiscount;
   const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
   const changeDue = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
+
+  const applyDiscountPercent = (mode: "none" | "preset" | "custom", percent: number) => {
+    setDiscountMode(mode);
+    setDiscountPercent(percent);
+    if (mode === "custom") return;
+    const suggestion = Math.min(receiptSubtotal, Math.max(0, receiptSubtotal * (percent / 100)));
+    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
+  };
 
   const resetReceipt = () => {
     setReceiptItems([]);
@@ -247,6 +267,7 @@ function Inventory() {
     setDiscountMode("none");
     setDiscountPercent(0);
     setCustomDiscountPercent("");
+    setDiscountOverride("");
   };
 
   const invalidateStockQueries = () => {
@@ -380,7 +401,8 @@ function Inventory() {
       cashPaid.trim().length > 0 ||
       discountMode !== "none" ||
       discountPercent > 0 ||
-      customDiscountPercent.trim().length > 0;
+      customDiscountPercent.trim().length > 0 ||
+      discountOverride.trim().length > 0;
 
     if (!hasDraft) {
       window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
@@ -395,9 +417,17 @@ function Inventory() {
         discountMode,
         discountPercent,
         customDiscountPercent,
+        discountOverride,
       } satisfies ReceiptDraft),
     );
-  }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
+  }, [
+    cashPaid,
+    customDiscountPercent,
+    discountMode,
+    discountOverride,
+    discountPercent,
+    receiptItems,
+  ]);
 
   useEffect(() => {
     if (!draftReceipt) return;
@@ -709,8 +739,7 @@ function Inventory() {
                   variant={discountMode === "none" ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
-                    setDiscountMode("none");
-                    setDiscountPercent(0);
+                    applyDiscountPercent("none", 0);
                     setCustomDiscountPercent("");
                   }}
                 >
@@ -727,8 +756,7 @@ function Inventory() {
                     }
                     size="sm"
                     onClick={() => {
-                      setDiscountMode("preset");
-                      setDiscountPercent(percent);
+                      applyDiscountPercent("preset", percent);
                       setCustomDiscountPercent("");
                     }}
                   >
@@ -739,10 +767,7 @@ function Inventory() {
                   type="button"
                   variant={discountMode === "custom" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => {
-                    setDiscountMode("custom");
-                    setDiscountPercent(0);
-                  }}
+                  onClick={() => applyDiscountPercent("custom", 0)}
                 >
                   Custom
                 </Button>
@@ -756,14 +781,34 @@ function Inventory() {
                   placeholder="Percent"
                   type="number"
                   value={customDiscountPercent}
-                  onChange={(e) => setCustomDiscountPercent(e.target.value)}
+                  onChange={(e) => {
+                    setCustomDiscountPercent(e.target.value);
+                    const pct = Number(e.target.value) || 0;
+                    const suggestion = Math.min(
+                      receiptSubtotal,
+                      Math.max(0, receiptSubtotal * (pct / 100)),
+                    );
+                    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
+                  }}
                 />
               )}
-              {discountAmount > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  Discount: -{money(discountAmount)}
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="discount-amount">Discount amount</Label>
+                <Input
+                  id="discount-amount"
+                  className="max-w-40"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  type="number"
+                  value={discountOverride}
+                  onChange={(e) => setDiscountOverride(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percent buttons fill this in - edit it directly to round.
+                </p>
+              </div>
             </div>
             <div className="flex justify-end text-sm font-semibold">
               Total: {money(receiptTotal)}
