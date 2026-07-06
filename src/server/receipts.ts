@@ -76,10 +76,8 @@ export const createReceipt = createServerFn({ method: "POST" })
 
       const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
-      // Prices are tax-inclusive, so the VAT amount is the portion of the
-      // total that represents tax, not an additional charge on top.
       const total = Math.max(0, subtotal - discount);
-      const vatAmount = total - total / (1 + VAT_RATE / 100);
+      const vatAmount = total * (VAT_RATE / 100);
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, cashPaid - total);
 
