@@ -116,7 +116,7 @@ const textCodeFromOcr = (text: string) => {
   return cleaned[0] ?? "";
 };
 
-const discountOptions = [15, 20, 25] as const;
+const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
 
 const readReceiptDraft = (): ReceiptDraft | null => {

@@ -578,18 +578,8 @@ function ProductsList() {
                 </tr>
               )}
               {filtered.map((p) => {
-                const status =
-                  p.quantity === 0
-                    ? "Out of stock"
-                    : p.quantity <= 5
-                      ? "Low stock"
-                      : "Available";
-                const variant =
-                  p.quantity === 0
-                    ? "destructive"
-                    : p.quantity <= 5
-                      ? "warning"
-                      : "default";
+                const status = p.quantity === 0 ? "Out of stock" : "Available";
+                const variant = p.quantity === 0 ? "destructive" : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
                     <td className="p-3">
