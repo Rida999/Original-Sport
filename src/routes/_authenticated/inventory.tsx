@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adjustProductStockByBarcode, listInventory, restoreReceiptStock } from "@/server/inventory";
+import {
+  adjustProductStockByArticleNumber,
+  listInventory,
+  restoreReceiptStock,
+} from "@/server/inventory";
 import {
   createReceipt,
   getDraftReceipt,
@@ -241,7 +245,6 @@ function Inventory() {
         if (!q) return true;
         return (
           p.name.toLowerCase().includes(q.toLowerCase()) ||
-          p.barcode.includes(q) ||
           p.article_number?.includes(q)
         );
       }),
@@ -268,14 +271,6 @@ function Inventory() {
   const suggestedChange = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
   const changeDue =
     changeOverride.trim() !== "" ? Math.max(0, Number(changeOverride) || 0) : suggestedChange;
-
-  const applyDiscountPercent = (mode: "none" | "preset" | "custom", percent: number) => {
-    setDiscountMode(mode);
-    setDiscountPercent(percent);
-    if (mode === "custom") return;
-    const suggestion = Math.min(receiptSubtotal, Math.max(0, receiptSubtotal * (percent / 100)));
-    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
-  };
 
   const applyDiscountPercent = (mode: "none" | "preset" | "custom", percent: number) => {
     setDiscountMode(mode);
