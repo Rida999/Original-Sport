@@ -12,6 +12,11 @@ import {
   saveDraftReceipt,
 } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import {
   Camera,
+  ChevronDown,
   Printer,
   RotateCcw,
   ScanLine,
@@ -175,6 +181,7 @@ function Inventory() {
   const [q, setQ] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
   const [inventorySort, setInventorySort] = useState<InventorySort>("recently-updated");
+  const [quickSalesOpen, setQuickSalesOpen] = useState(true);
   const [quickSalesEditing, setQuickSalesEditing] = useState(false);
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
@@ -746,60 +753,84 @@ function Inventory() {
         )}
       </Card>
 
-      <Card className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium">Quick sales</div>
+      <Collapsible
+        open={quickSalesOpen}
+        onOpenChange={(open) => {
+          setQuickSalesOpen(open);
+          if (!open) setQuickSalesEditing(false);
+        }}
+      >
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="-ml-2 h-auto min-w-0 justify-start gap-2 px-2 py-1.5"
+              >
+                <ChevronDown
+                  className={`size-4 shrink-0 transition-transform ${
+                    quickSalesOpen ? "" : "-rotate-90"
+                  }`}
+                />
+                <span className="truncate text-sm font-medium">Quick sales</span>
+                <span className="text-xs text-muted-foreground">
+                  {quickSaleProducts.length}
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            {quickSalesOpen && quickSaleProducts.length > 0 && (
+              <Button
+                type="button"
+                variant={quickSalesEditing ? "default" : "outline"}
+                size="sm"
+                onClick={() => setQuickSalesEditing((editing) => !editing)}
+              >
+                {quickSalesEditing ? "Save" : "Edit"}
+              </Button>
+            )}
           </div>
-          {quickSaleProducts.length > 0 && (
-            <Button
-              type="button"
-              variant={quickSalesEditing ? "default" : "outline"}
-              size="sm"
-              onClick={() => setQuickSalesEditing((editing) => !editing)}
-            >
-              {quickSalesEditing ? "Save" : "Edit"}
-            </Button>
-          )}
-        </div>
-        {quickSaleProducts.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">
-            Add products from the inventory list below.
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {quickSaleProducts.map((product) => (
-              <div key={product.id} className="relative max-w-full">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-w-0 max-w-full justify-start px-3"
-                  disabled={quickSalesEditing || adjustStock.isPending || product.quantity <= 0}
-                  onClick={() => sellQuickProduct(product.article_number)}
-                >
-                  <ShoppingCart className="size-4 shrink-0" />
-                  <span className="truncate">{product.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {money(product.selling_price)}
-                  </span>
-                </Button>
-                {quickSalesEditing && (
-                  <button
-                    type="button"
-                    className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full border bg-destructive text-destructive-foreground shadow-sm"
-                    onClick={() =>
-                      toggleQuickSale.mutate({ id: product.id, quick_sale: false })
-                    }
-                    aria-label={`Remove ${product.name} from quick sales`}
-                  >
-                    <span className="h-0.5 w-2.5 rounded-full bg-current" />
-                  </button>
-                )}
+          <CollapsibleContent>
+            {quickSaleProducts.length === 0 ? (
+              <div className="py-4 text-sm text-muted-foreground">
+                Add products from the inventory list below.
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {quickSaleProducts.map((product) => (
+                  <div key={product.id} className="relative max-w-full">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-w-0 max-w-full justify-start px-3"
+                      disabled={quickSalesEditing || adjustStock.isPending || product.quantity <= 0}
+                      onClick={() => sellQuickProduct(product.article_number)}
+                    >
+                      <ShoppingCart className="size-4 shrink-0" />
+                      <span className="truncate">{product.name}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {money(product.selling_price)}
+                      </span>
+                    </Button>
+                    {quickSalesEditing && (
+                      <button
+                        type="button"
+                        className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full border bg-destructive text-destructive-foreground shadow-sm"
+                        onClick={() =>
+                          toggleQuickSale.mutate({ id: product.id, quick_sale: false })
+                        }
+                        aria-label={`Remove ${product.name} from quick sales`}
+                      >
+                        <span className="h-0.5 w-2.5 rounded-full bg-current" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {receiptItems.length > 0 && (
         <Card className="p-4 space-y-3">
