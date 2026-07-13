@@ -23,8 +23,7 @@ CREATE TABLE IF NOT EXISTS categories (
 
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  barcode TEXT NOT NULL UNIQUE,
-  article_number TEXT,
+  article_number TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   model_name TEXT,
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
@@ -53,10 +52,6 @@ CREATE TABLE IF NOT EXISTS products (
 
 ALTER TABLE products DROP COLUMN IF EXISTS out_of_stock_since;
 
-CREATE UNIQUE INDEX IF NOT EXISTS products_article_number_unique
-  ON products(article_number)
-  WHERE article_number IS NOT NULL AND article_number <> '';
-
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   action TEXT NOT NULL,
@@ -79,7 +74,7 @@ CREATE TABLE IF NOT EXISTS import_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   import_batch_id UUID NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
   product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-  barcode TEXT NOT NULL,
+  article_number TEXT NOT NULL,
   product_name TEXT NOT NULL,
   quantity_added INTEGER NOT NULL DEFAULT 0,
   previous_quantity INTEGER,

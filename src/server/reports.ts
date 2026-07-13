@@ -4,8 +4,7 @@ import type { Product } from "./products";
 
 export type SoldProductReport = {
   id: string;
-  barcode: string;
-  article_number: string | null;
+  article_number: string;
   name: string;
   quantity_sold: number;
   selling_price: number;
@@ -47,7 +46,6 @@ export const listReportProducts = createServerFn({ method: "GET" }).handler(asyn
       Product,
       | "id"
       | "name"
-      | "barcode"
       | "article_number"
       | "quantity"
       | "min_stock"
@@ -55,7 +53,7 @@ export const listReportProducts = createServerFn({ method: "GET" }).handler(asyn
       | "purchase_price"
     >
   >(
-    "select id, name, barcode, article_number, quantity, min_stock, selling_price, purchase_price from products",
+    "select id, name, article_number, quantity, min_stock, selling_price, purchase_price from products",
   );
 });
 
@@ -67,7 +65,6 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
   const products = await query<SoldProductReport>(
     `select
        p.id,
-       p.barcode,
        p.article_number,
        p.name,
        count(a.id)::int as quantity_sold,
@@ -77,7 +74,7 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
      from activity_logs a
      join products p on p.id = a.entity_id
      where a.action = 'scanned_out'
-     group by p.id, p.barcode, p.article_number, p.name, p.selling_price
+     group by p.id, p.article_number, p.name, p.selling_price
      order by quantity_sold desc, last_sold_at desc`,
   );
   const totalSales = products.reduce((sum, product) => sum + Number(product.total_sales), 0);
@@ -167,8 +164,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
     const products = await query<SoldProductReport>(
       `select
          coalesce(p.id::text, ri.product_id::text, ri.description) as id,
-         coalesce(p.barcode, '') as barcode,
-         p.article_number,
+         coalesce(p.article_number, '') as article_number,
          coalesce(p.name, ri.description) as name,
          sum(ri.quantity)::int as quantity_sold,
          max(ri.unit_price)::numeric(12, 2) as selling_price,
@@ -178,7 +174,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
        join receipts r on r.id = ri.receipt_id
        left join products p on p.id = ri.product_id
        where r.created_at >= ${range.start} and r.created_at < ${range.end}
-       group by coalesce(p.id::text, ri.product_id::text, ri.description), p.barcode, p.article_number, p.name, ri.description
+       group by coalesce(p.id::text, ri.product_id::text, ri.description), p.article_number, p.name, ri.description
        order by quantity_sold desc, total_sales desc
        limit 6`,
     );

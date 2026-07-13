@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, type FormEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,28 +20,62 @@ import {
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
 
+const cleanTextPattern = /^[A-Za-z0-9 ]*$/;
+const optionalCleanText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .regex(cleanTextPattern, "Special characters are not allowed")
+    .optional()
+    .or(z.literal(""));
+const priceField = z.preprocess(
+  (value) => String(value ?? ""),
+  z
+    .string()
+    .regex(/^\d{1,4}(\.\d{1,2})?$/, "Price must be at most 4 digits and 2 decimals")
+    .transform(Number),
+);
+const quantityField = z.preprocess(
+  (value) => String(value ?? ""),
+  z
+    .string()
+    .regex(/^\d{1,5}$/, "Quantity must be at most 5 digits")
+    .transform(Number),
+);
+
 const schema = z.object({
-  barcode: z.string().min(3, "Required"),
-  article_number: z.string().max(100).optional(),
-  name: z.string().min(2, "Required").max(200),
-  model_name: z.string().max(200).optional(),
+  article_number: z
+    .string()
+    .min(1, "Required")
+    .regex(/^[A-Za-z0-9 ]+$/, "Article number cannot contain special characters")
+    .max(20, "Article number must be at most 20 characters"),
+  name: z
+    .string()
+    .min(2, "Required")
+    .max(30, "Product name must be at most 30 characters")
+    .regex(/^[A-Za-z0-9 ]+$/, "Product name cannot contain special characters"),
+  model_name: optionalCleanText(200),
   category_id: z.string().uuid().nullable().optional(),
-  key_category: z.string().max(200).optional(),
-  age_group: z.string().max(100).optional(),
+  key_category: optionalCleanText(200),
+  age_group: optionalCleanText(100),
   gender: z.enum(["men", "women", "unisex", "kids"]).nullable().optional(),
-  sport: z.string().max(100).optional(),
-  marketing_line: z.string().max(200).optional(),
-  product_division: z.string().max(100).optional(),
-  product_line: z.string().max(200).optional(),
-  product_type: z.string().max(200).optional(),
-  sub_brand: z.string().max(100).optional(),
-  color: z.string().max(50).optional(),
-  size: z.string().max(50).optional(),
-  purchase_price: z.coerce.number().min(0),
-  selling_price: z.coerce.number().min(0),
-  quantity: z.coerce.number().int().min(0),
+  sport: optionalCleanText(100),
+  marketing_line: optionalCleanText(200),
+  product_division: optionalCleanText(30),
+  product_line: optionalCleanText(30),
+  product_type: optionalCleanText(30),
+  sub_brand: optionalCleanText(30),
+  color: optionalCleanText(20),
+  size: z
+    .string()
+    .regex(/^\d{1,2}(\.\d)?$/, "Size must be like 9, 42, or 42.5")
+    .optional()
+    .or(z.literal("")),
+  purchase_price: priceField,
+  selling_price: priceField,
+  quantity: quantityField,
   min_stock: z.coerce.number().int().min(0),
-  description: z.string().max(2000).optional(),
+  description: optionalCleanText(200),
 });
 
 type Values = z.infer<typeof schema>;
@@ -61,13 +95,40 @@ const readImage = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+const sanitizeArticleNumber = (value: string) => value.replace(/[^A-Za-z0-9 ]/g, "");
+const sanitizeText = (value: string) => value.replace(/[^A-Za-z0-9 ]/g, "");
+const sanitizeMoney = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [whole, ...decimalParts] = cleaned.split(".");
+  const wholePart = whole.slice(0, 4);
+  const decimals = decimalParts.join("").slice(0, 2);
+  return cleaned.includes(".") ? `${wholePart}.${decimals}` : wholePart;
+};
+const sanitizeInteger = (value: string) => value.replace(/\D/g, "").slice(0, 5);
+const sanitizeSize = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [whole, ...decimalParts] = cleaned.split(".");
+  const wholePart = whole.slice(0, 2);
+  if (!wholePart) return "";
+  const decimal = decimalParts.join("").slice(0, 1);
+  return cleaned.includes(".") ? `${wholePart}.${decimal}` : wholePart;
+};
+const sanitizedInput =
+  (sanitize: (value: string) => string) =>
+  (event: FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    event.currentTarget.value = sanitize(event.currentTarget.value);
+  };
+const priceDefault = (value: unknown) => {
+  const price = Number(value ?? 0);
+  return price > 0 ? price : ("" as unknown as number);
+};
+
 export function ProductForm({ initial }: { initial?: ProductDefault }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const barcodeRef = useRef<HTMLInputElement>(null);
 
   const {
     register,
@@ -78,7 +139,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
   } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
-      barcode: initial?.barcode ?? "",
       article_number: initial?.article_number ?? "",
       name: initial?.name ?? "",
       model_name: initial?.model_name ?? "",
@@ -94,8 +154,8 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       sub_brand: initial?.sub_brand ?? "",
       color: initial?.color ?? "",
       size: initial?.size ?? "",
-      purchase_price: Number(initial?.purchase_price ?? 0),
-      selling_price: Number(initial?.selling_price ?? 0),
+      purchase_price: priceDefault(initial?.purchase_price),
+      selling_price: priceDefault(initial?.selling_price),
       quantity: Number(initial?.quantity ?? 0),
       min_stock: Number(initial?.min_stock ?? 5),
       description: initial?.description ?? "",
@@ -125,7 +185,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         ...values,
         gender: values.gender || null,
         category_id: values.category_id || null,
-        article_number: values.article_number || values.barcode,
         model_name: values.model_name || values.name,
         key_category: values.key_category || null,
         age_group: values.age_group || null,
@@ -144,13 +203,21 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       };
       return saveProduct({ data: { ...payload, id: initial?.id } });
     },
-    onSuccess: (_result, values) => {
+    onSuccess: async (_result, values) => {
       toast.success(initial?.id ? "Product updated" : "Product created");
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["archive"] });
-      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      navigate({ to: values.quantity === 0 ? "/archive" : "/products" });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["products"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["archive"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["inventory"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["reports"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["sold-products-report"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["sales-report"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "all" }),
+        initial?.id
+          ? qc.invalidateQueries({ queryKey: ["product", initial.id], refetchType: "all" })
+          : Promise.resolve(),
+      ]);
+      navigate({ to: values.quantity === 0 ? "/archive" : "/products", replace: true });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -161,36 +228,40 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         <Card className="p-5 md:col-span-2 space-y-4">
           <h2 className="font-semibold">Basics</h2>
           <div className="space-y-1.5">
-            <Label htmlFor="barcode">Article number</Label>
+            <Label htmlFor="article_number">Article number</Label>
             <Input
-              id="barcode"
+              id="article_number"
               autoFocus
-              {...register("barcode")}
-              ref={(el) => {
-                register("barcode").ref(el);
-                barcodeRef.current = el;
-              }}
+              maxLength={20}
+              onInput={sanitizedInput(sanitizeArticleNumber)}
+              {...register("article_number")}
               placeholder="Scan or type article number..."
             />
-            {errors.barcode && <p className="text-xs text-destructive">{errors.barcode.message}</p>}
+            {errors.article_number && (
+              <p className="text-xs text-destructive">{errors.article_number.message}</p>
+            )}
             <p className="text-xs text-muted-foreground">
               Scanners auto-fill this field when focused.
             </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">Product name</Label>
-            <Input id="name" {...register("name")} />
+            <Input
+              id="name"
+              maxLength={30}
+              onInput={sanitizedInput(sanitizeText)}
+              {...register("name")}
+            />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Brand">
-              <Input {...register("sub_brand")} placeholder="Adidas, Nike, Puma…" />
-            </Field>
-            <Field label="Key category">
-              <Input {...register("key_category")} />
-            </Field>
-            <Field label="Age group">
-              <Input {...register("age_group")} />
+              <Input
+                maxLength={30}
+                onInput={sanitizedInput(sanitizeText)}
+                {...register("sub_brand")}
+                placeholder="Adidas Nike Puma"
+              />
             </Field>
             <Field label="Gender">
               <Select
@@ -209,24 +280,56 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
               </Select>
             </Field>
             <Field label="Product division">
-              <Input {...register("product_division")} />
+              <Input
+                maxLength={30}
+                onInput={sanitizedInput(sanitizeText)}
+                {...register("product_division")}
+              />
             </Field>
             <Field label="Product line">
-              <Input {...register("product_line")} />
+              <Input
+                maxLength={30}
+                onInput={sanitizedInput(sanitizeText)}
+                {...register("product_line")}
+              />
             </Field>
             <Field label="Product type">
-              <Input {...register("product_type")} />
+              <Input
+                maxLength={30}
+                onInput={sanitizedInput(sanitizeText)}
+                {...register("product_type")}
+              />
             </Field>
             <Field label="Color">
-              <Input {...register("color")} />
+              <Input
+                maxLength={20}
+                onInput={sanitizedInput(sanitizeText)}
+                {...register("color")}
+              />
             </Field>
             <Field label="Size">
-              <Input {...register("size")} placeholder="M, 42, 10.5…" />
+              <Input
+                inputMode="decimal"
+                maxLength={4}
+                onInput={sanitizedInput(sanitizeSize)}
+                {...register("size")}
+                placeholder="42.5"
+              />
+              {errors.size && <p className="text-xs text-destructive">{errors.size.message}</p>}
             </Field>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" rows={4} {...register("description")} />
+            <Textarea
+              id="description"
+              rows={4}
+              maxLength={200}
+              onInput={sanitizedInput(sanitizeText)}
+              {...register("description")}
+            />
+            {errors.description && (
+              <p className="text-xs text-destructive">{errors.description.message}</p>
+            )}
           </div>
         </Card>
 
@@ -234,13 +337,39 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           <Card className="p-5 space-y-3">
             <h2 className="font-semibold">Pricing & stock</h2>
             <Field label="Purchase price">
-              <Input type="number" step="0.01" {...register("purchase_price")} />
+              <Input
+                inputMode="decimal"
+                maxLength={6}
+                placeholder="0.00"
+                onInput={sanitizedInput(sanitizeMoney)}
+                {...register("purchase_price")}
+              />
+              {errors.purchase_price && (
+                <p className="text-xs text-destructive">{errors.purchase_price.message}</p>
+              )}
             </Field>
             <Field label="Selling price">
-              <Input type="number" step="0.01" {...register("selling_price")} />
+              <Input
+                inputMode="decimal"
+                maxLength={6}
+                placeholder="0.00"
+                onInput={sanitizedInput(sanitizeMoney)}
+                {...register("selling_price")}
+              />
+              {errors.selling_price && (
+                <p className="text-xs text-destructive">{errors.selling_price.message}</p>
+              )}
             </Field>
             <Field label="Quantity">
-              <Input type="number" {...register("quantity")} />
+              <Input
+                inputMode="numeric"
+                maxLength={5}
+                onInput={sanitizedInput(sanitizeInteger)}
+                {...register("quantity")}
+              />
+              {errors.quantity && (
+                <p className="text-xs text-destructive">{errors.quantity.message}</p>
+              )}
             </Field>
           </Card>
 

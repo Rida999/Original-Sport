@@ -29,7 +29,7 @@ function ArchivePage() {
     const term = q.toLowerCase().trim();
     if (!term) return data;
     return data.filter((p) =>
-      [p.name, p.model_name, p.article_number, p.barcode, p.product_type, p.category?.name]
+      [p.name, p.model_name, p.article_number, p.product_type, p.category?.name]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term)),
     );
@@ -108,7 +108,7 @@ function ArchivePage() {
                     </div>
                   </td>
                   <td className="p-3 font-mono text-xs text-muted-foreground">
-                    {product.article_number ?? product.barcode}
+                    {product.article_number}
                   </td>
                   <td className="p-3">{product.category?.name ?? "-"}</td>
                   <td className="p-3">{formatGender(product.gender)}</td>

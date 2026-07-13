@@ -55,7 +55,7 @@ function Reports() {
     ];
     const rows = report.products.map((product) => [
       product.name,
-      product.article_number ?? product.barcode,
+      product.article_number,
       product.quantity_sold,
       product.selling_price,
       product.total_sales,
@@ -193,7 +193,7 @@ function Reports() {
                     <tr key={product.id} className="hover:bg-muted/30">
                       <td className="p-3 font-medium">{product.name}</td>
                       <td className="p-3 font-mono text-xs text-muted-foreground">
-                        {product.article_number ?? product.barcode}
+                        {product.article_number}
                       </td>
                       <td className="p-3 text-right tabular-nums">{product.quantity_sold}</td>
                       <td className="p-3 text-right tabular-nums">
