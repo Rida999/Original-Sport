@@ -251,6 +251,7 @@ function Inventory() {
     (sum, item) => sum + item.quantity * item.unit_price,
     0,
   );
+  const receiptItemCount = receiptItems.reduce((sum, item) => sum + item.quantity, 0);
   const activeDiscountPercent =
     discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
   const suggestedDiscount = Math.min(
@@ -754,8 +755,9 @@ function Inventory() {
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end text-sm font-semibold">
-              Subtotal: {money(receiptSubtotal)}
+            <div className="flex justify-end gap-4 text-sm font-semibold">
+              <span>Items: {receiptItemCount}</span>
+              <span>Subtotal: {money(receiptSubtotal)}</span>
             </div>
             <div className="space-y-2">
               <Label>Apply discount</Label>
