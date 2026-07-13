@@ -561,8 +561,9 @@ function ProductsList() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr className="text-left">
-                <th className="p-3 w-8">
+                <th className="px-2 py-3 w-7">
                   <Checkbox
+                    className="size-3 [&_svg]:size-3"
                     checked={selected.size > 0 && selected.size === filtered.length}
                     onCheckedChange={toggleAll}
                   />
@@ -603,8 +604,12 @@ function ProductsList() {
                 const variant = p.quantity === 0 ? "destructive" : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
-                    <td className="p-3">
-                      <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} />
+                    <td className="px-2 py-3">
+                      <Checkbox
+                        className="size-3 [&_svg]:size-3"
+                        checked={selected.has(p.id)}
+                        onCheckedChange={() => toggle(p.id)}
+                      />
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-3">
