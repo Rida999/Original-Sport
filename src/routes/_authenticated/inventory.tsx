@@ -54,6 +54,9 @@ type ReceiptDraft = {
   discountMode: "none" | "preset" | "custom";
   discountPercent: number;
   customDiscountPercent: string;
+  discountOverride: string;
+  totalOverride: string;
+  changeOverride: string;
 };
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -147,6 +150,10 @@ const readReceiptDraft = (): ReceiptDraft | null => {
       discountPercent: Number(draft.discountPercent) || 0,
       customDiscountPercent:
         typeof draft.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+      discountOverride:
+        typeof draft.discountOverride === "string" ? draft.discountOverride : "",
+      totalOverride: typeof draft.totalOverride === "string" ? draft.totalOverride : "",
+      changeOverride: typeof draft.changeOverride === "string" ? draft.changeOverride : "",
     };
   } catch {
     return null;
@@ -182,6 +189,19 @@ function Inventory() {
   );
   const [customDiscountPercent, setCustomDiscountPercent] = useState(
     () => readReceiptDraft()?.customDiscountPercent ?? "",
+  );
+  // The percent buttons just fill this in as a suggestion - typing directly
+  // in the discount amount field (e.g. to round it) overrides that.
+  const [discountOverride, setDiscountOverride] = useState(
+    () => readReceiptDraft()?.discountOverride ?? "",
+  );
+  // Total/Change display the live-computed value until the field is edited
+  // directly (e.g. to round it), at which point the typed value takes over.
+  const [totalOverride, setTotalOverride] = useState(
+    () => readReceiptDraft()?.totalOverride ?? "",
+  );
+  const [changeOverride, setChangeOverride] = useState(
+    () => readReceiptDraft()?.changeOverride ?? "",
   );
   const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
@@ -233,12 +253,28 @@ function Inventory() {
   );
   const activeDiscountPercent =
     discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
-  const discountAmount = Math.min(
+  const suggestedDiscount = Math.min(
     receiptSubtotal,
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
   );
-  const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
-  const changeDue = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
+  const discountAmount =
+    discountOverride.trim() !== ""
+      ? Math.min(receiptSubtotal, Math.max(0, Number(discountOverride) || 0))
+      : suggestedDiscount;
+  const suggestedTotal = Math.max(0, receiptSubtotal - discountAmount);
+  const receiptTotal =
+    totalOverride.trim() !== "" ? Math.max(0, Number(totalOverride) || 0) : suggestedTotal;
+  const suggestedChange = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
+  const changeDue =
+    changeOverride.trim() !== "" ? Math.max(0, Number(changeOverride) || 0) : suggestedChange;
+
+  const applyDiscountPercent = (mode: "none" | "preset" | "custom", percent: number) => {
+    setDiscountMode(mode);
+    setDiscountPercent(percent);
+    if (mode === "custom") return;
+    const suggestion = Math.min(receiptSubtotal, Math.max(0, receiptSubtotal * (percent / 100)));
+    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
+  };
 
   const resetReceipt = () => {
     setReceiptItems([]);
@@ -247,6 +283,9 @@ function Inventory() {
     setDiscountMode("none");
     setDiscountPercent(0);
     setCustomDiscountPercent("");
+    setDiscountOverride("");
+    setTotalOverride("");
+    setChangeOverride("");
   };
 
   const invalidateStockQueries = () => {
@@ -323,7 +362,9 @@ function Inventory() {
           items: receiptItems,
           customer_name: null,
           discount: discountAmount,
+          total: receiptTotal,
           cash_paid: Number(cashPaid) || 0,
+          cash_exchange: changeDue,
         },
       }),
     onSuccess: (receipt) => {
@@ -380,7 +421,10 @@ function Inventory() {
       cashPaid.trim().length > 0 ||
       discountMode !== "none" ||
       discountPercent > 0 ||
-      customDiscountPercent.trim().length > 0;
+      customDiscountPercent.trim().length > 0 ||
+      discountOverride.trim().length > 0 ||
+      totalOverride.trim().length > 0 ||
+      changeOverride.trim().length > 0;
 
     if (!hasDraft) {
       window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
@@ -395,9 +439,21 @@ function Inventory() {
         discountMode,
         discountPercent,
         customDiscountPercent,
+        discountOverride,
+        totalOverride,
+        changeOverride,
       } satisfies ReceiptDraft),
     );
-  }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
+  }, [
+    cashPaid,
+    changeOverride,
+    customDiscountPercent,
+    discountMode,
+    discountOverride,
+    discountPercent,
+    receiptItems,
+    totalOverride,
+  ]);
 
   useEffect(() => {
     if (!draftReceipt) return;
@@ -765,8 +821,20 @@ function Inventory() {
                 </div>
               )}
             </div>
-            <div className="flex justify-end text-sm font-semibold">
-              Total: {money(receiptTotal)}
+            <div className="flex items-center justify-end gap-2">
+              <Label htmlFor="total-amount" className="text-sm font-semibold">
+                Total
+              </Label>
+              <Input
+                id="total-amount"
+                className="max-w-28 text-right font-semibold"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                type="number"
+                value={totalOverride !== "" ? totalOverride : suggestedTotal.toFixed(2)}
+                onChange={(e) => setTotalOverride(e.target.value)}
+              />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -781,8 +849,20 @@ function Inventory() {
               </div>
             </div>
             {cashPaid.trim().length > 0 && (
-              <div className="flex justify-end text-sm font-semibold">
-                Change: {money(changeDue)}
+              <div className="flex items-center justify-end gap-2">
+                <Label htmlFor="change-amount" className="text-sm font-semibold">
+                  Change
+                </Label>
+                <Input
+                  id="change-amount"
+                  className="max-w-28 text-right font-semibold"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  type="number"
+                  value={changeOverride !== "" ? changeOverride : suggestedChange.toFixed(2)}
+                  onChange={(e) => setChangeOverride(e.target.value)}
+                />
               </div>
             )}
             <Button

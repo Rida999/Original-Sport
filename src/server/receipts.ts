@@ -62,7 +62,9 @@ export const createReceipt = createServerFn({ method: "POST" })
       items: ReceiptItemInput[];
       customer_name?: string | null;
       discount?: number;
+      total?: number;
       cash_paid?: number;
+      cash_exchange?: number;
     }) => data,
   )
   .handler(async ({ data }): Promise<ReceiptWithItems> => {
@@ -76,10 +78,13 @@ export const createReceipt = createServerFn({ method: "POST" })
 
       const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
-      const total = Math.max(0, subtotal - discount);
+      // Total/cash_exchange can be rounded manually at checkout, so trust an
+      // explicit value from the client when given rather than only deriving
+      // it from subtotal/discount or cash_paid.
+      const total = Math.max(0, Number(data.total ?? subtotal - discount));
       const vatAmount = total * (VAT_RATE / 100);
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
-      const cashExchange = Math.max(0, cashPaid - total);
+      const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
 
       const receipt = await client.query<Receipt>(
         `insert into receipts (
