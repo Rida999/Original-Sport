@@ -69,11 +69,11 @@ function Dashboard() {
               {data?.recent.map((p) => (
                 <li key={p.id} className="py-2 flex items-center justify-between text-sm">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-10 rounded-md border bg-white p-1 overflow-hidden shrink-0">
-                      {p.images?.[0] && (
+                    {p.images?.[0] && (
+                      <div className="size-10 rounded-md border bg-white p-1 overflow-hidden shrink-0">
                         <img src={p.images[0]} alt="" className="size-full object-contain" />
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <span className="truncate">{p.name}</span>
                   </div>
                   <span className="text-muted-foreground tabular-nums">

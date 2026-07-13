@@ -35,6 +35,10 @@ const priceField = z.preprocess(
     .regex(/^\d{1,4}(\.\d{1,2})?$/, "Price must be at most 4 digits and 2 decimals")
     .transform(Number),
 );
+const optionalPriceField = z.preprocess((value) => {
+  const text = String(value ?? "").trim();
+  return text === "" ? 0 : text;
+}, z.coerce.number().min(0));
 const quantityField = z.preprocess(
   (value) => String(value ?? ""),
   z
@@ -71,7 +75,7 @@ const schema = z.object({
     .regex(/^\d{1,2}(\.\d)?$/, "Size must be like 9, 42, or 42.5")
     .optional()
     .or(z.literal("")),
-  purchase_price: priceField,
+  purchase_price: optionalPriceField,
   selling_price: priceField,
   quantity: quantityField,
   min_stock: z.coerce.number().int().min(0),
@@ -339,9 +343,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Field label="Purchase price">
               <Input
                 inputMode="decimal"
-                maxLength={6}
                 placeholder="0.00"
-                onInput={sanitizedInput(sanitizeMoney)}
                 {...register("purchase_price")}
               />
               {errors.purchase_price && (

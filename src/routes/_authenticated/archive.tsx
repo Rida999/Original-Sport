@@ -95,15 +95,15 @@ function ArchivePage() {
                 <tr key={product.id} className="hover:bg-muted/30">
                   <td className="p-3">
                     <div className="flex items-center gap-3">
-                      <div className="size-10 rounded-md border bg-white p-1 overflow-hidden shrink-0">
-                        {product.images?.[0] && (
+                      {product.images?.[0] && (
+                        <div className="size-10 rounded-md border bg-white p-1 overflow-hidden shrink-0">
                           <img
                             src={product.images[0]}
                             alt=""
                             className="size-full object-contain"
                           />
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <span className="font-medium">{product.name}</span>
                     </div>
                   </td>
