@@ -21,9 +21,12 @@ import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
 
 const schema = z.object({
-  barcode: z.string().min(3, "Required"),
-  article_number: z.string().max(100).optional(),
-  name: z.string().min(2, "Required").max(200),
+  article_number: z
+    .string()
+    .min(1, "Required")
+    .regex(/^\d+$/, "Article number must contain numbers only")
+    .max(10, "Article number must be at most 10 numbers"),
+  name: z.string().min(2, "Required").max(20, "Product name must be at most 20 characters"),
   model_name: z.string().max(200).optional(),
   category_id: z.string().uuid().nullable().optional(),
   key_category: z.string().max(200).optional(),
@@ -36,12 +39,19 @@ const schema = z.object({
   product_type: z.string().max(200).optional(),
   sub_brand: z.string().max(100).optional(),
   color: z.string().max(50).optional(),
-  size: z.string().max(50).optional(),
-  purchase_price: z.coerce.number().min(0),
-  selling_price: z.coerce.number().min(0),
-  quantity: z.coerce.number().int().min(0),
+  size: z
+    .string()
+    .regex(/^\d{1,2}(\.\d)?$/, "Size must be like 9, 42, or 42.5")
+    .optional()
+    .or(z.literal("")),
+  purchase_price: z.coerce.number().min(0, "Purchase price cannot be negative"),
+  selling_price: z.coerce.number().min(0, "Selling price cannot be negative"),
+  quantity: z.coerce
+    .number()
+    .int("Quantity must be a whole number")
+    .min(0, "Quantity cannot be negative"),
   min_stock: z.coerce.number().int().min(0),
-  description: z.string().max(2000).optional(),
+  description: z.string().max(200, "Description must be at most 200 characters").optional(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -67,7 +77,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const barcodeRef = useRef<HTMLInputElement>(null);
 
   const {
     register,
@@ -78,7 +87,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
   } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
-      barcode: initial?.barcode ?? "",
       article_number: initial?.article_number ?? "",
       name: initial?.name ?? "",
       model_name: initial?.model_name ?? "",
@@ -125,7 +133,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         ...values,
         gender: values.gender || null,
         category_id: values.category_id || null,
-        article_number: values.article_number || values.barcode,
         model_name: values.model_name || values.name,
         key_category: values.key_category || null,
         age_group: values.age_group || null,
@@ -144,13 +151,21 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
       };
       return saveProduct({ data: { ...payload, id: initial?.id } });
     },
-    onSuccess: (_result, values) => {
+    onSuccess: async (_result, values) => {
       toast.success(initial?.id ? "Product updated" : "Product created");
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["archive"] });
-      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      navigate({ to: values.quantity === 0 ? "/archive" : "/products" });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["products"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["archive"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["inventory"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["reports"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["sold-products-report"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["sales-report"], refetchType: "all" }),
+        qc.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "all" }),
+        initial?.id
+          ? qc.invalidateQueries({ queryKey: ["product", initial.id], refetchType: "all" })
+          : Promise.resolve(),
+      ]);
+      navigate({ to: values.quantity === 0 ? "/archive" : "/products", replace: true });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -179,18 +194,12 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">Product name</Label>
-            <Input id="name" {...register("name")} />
+            <Input id="name" maxLength={20} {...register("name")} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Brand">
               <Input {...register("sub_brand")} placeholder="Adidas, Nike, Puma…" />
-            </Field>
-            <Field label="Key category">
-              <Input {...register("key_category")} />
-            </Field>
-            <Field label="Age group">
-              <Input {...register("age_group")} />
             </Field>
             <Field label="Gender">
               <Select
@@ -221,12 +230,21 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
               <Input {...register("color")} />
             </Field>
             <Field label="Size">
-              <Input {...register("size")} placeholder="M, 42, 10.5…" />
+              <Input
+                inputMode="decimal"
+                maxLength={4}
+                {...register("size")}
+                placeholder="42.5"
+              />
+              {errors.size && <p className="text-xs text-destructive">{errors.size.message}</p>}
             </Field>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" rows={4} {...register("description")} />
+            <Textarea id="description" rows={4} maxLength={200} {...register("description")} />
+            {errors.description && (
+              <p className="text-xs text-destructive">{errors.description.message}</p>
+            )}
           </div>
         </Card>
 
@@ -234,13 +252,22 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           <Card className="p-5 space-y-3">
             <h2 className="font-semibold">Pricing & stock</h2>
             <Field label="Purchase price">
-              <Input type="number" step="0.01" {...register("purchase_price")} />
+              <Input type="number" step="0.01" min="0" {...register("purchase_price")} />
+              {errors.purchase_price && (
+                <p className="text-xs text-destructive">{errors.purchase_price.message}</p>
+              )}
             </Field>
             <Field label="Selling price">
-              <Input type="number" step="0.01" {...register("selling_price")} />
+              <Input type="number" step="0.01" min="0" {...register("selling_price")} />
+              {errors.selling_price && (
+                <p className="text-xs text-destructive">{errors.selling_price.message}</p>
+              )}
             </Field>
             <Field label="Quantity">
-              <Input type="number" {...register("quantity")} />
+              <Input type="number" min="0" step="1" {...register("quantity")} />
+              {errors.quantity && (
+                <p className="text-xs text-destructive">{errors.quantity.message}</p>
+              )}
             </Field>
           </Card>
 

@@ -64,7 +64,7 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 type StockAdjustment = {
   isPending: boolean;
-  mutate: (variables: { barcode: string; mode: "remove" | "return" }) => void;
+  mutate: (variables: { article_number: string; mode: "remove" | "return" }) => void;
 };
 
 const DEFAULT_CAMERA_ZOOM = 1.8;
@@ -280,8 +280,13 @@ function Inventory() {
   };
 
   const adjustStock = useMutation({
-    mutationFn: async ({ barcode, mode }: { barcode: string; mode: "remove" | "return" }) =>
-      adjustProductStockByBarcode({ data: { barcode, mode } }),
+    mutationFn: async ({
+      article_number,
+      mode,
+    }: {
+      article_number: string;
+      mode: "remove" | "return";
+    }) => adjustProductStockByArticleNumber({ data: { article_number, mode } }),
     onSuccess: (result) => {
       if (result.status === "updated") {
         const action = result.mode === "return" ? "Returned" : "Removed";
@@ -315,7 +320,7 @@ function Inventory() {
       } else if (result.status === "out_of_stock") {
         toast.warning(`${result.product.name} is out of stock`);
       } else {
-        toast.error(`No product found for ${result.barcode}`);
+        toast.error(`No product found for ${result.article_number}`);
       }
 
       setScanCode("");
@@ -514,7 +519,7 @@ function Inventory() {
             if (code && scanCooldownRef.current !== code) {
               scanCooldownRef.current = code;
               setScanCode(code);
-              adjustStockRef.current?.mutate({ barcode: code, mode: scanMode });
+              adjustStockRef.current?.mutate({ article_number: code, mode: scanMode });
               window.setTimeout(() => {
                 if (scanCooldownRef.current === code) scanCooldownRef.current = "";
               }, 2200);
@@ -539,9 +544,13 @@ function Inventory() {
   }, [cameraActive, scanMode]);
 
   const handleScan = () => {
-    const barcode = scanCode.trim();
-    if (!barcode || adjustStock.isPending) return;
-    adjustStock.mutate({ barcode, mode: scanMode });
+    const articleNumber = scanCode.trim();
+    if (!articleNumber || adjustStock.isPending) return;
+    if (!/^\d{1,20}$/.test(articleNumber)) {
+      toast.error("Article number must contain at most 20 digits.");
+      return;
+    }
+    adjustStock.mutate({ article_number: articleNumber, mode: scanMode });
   };
 
   const handleCameraTouchStart = (event: TouchEvent<HTMLDivElement>) => {
@@ -605,6 +614,8 @@ function Inventory() {
                 placeholder="Scan text"
                 value={scanCode}
                 autoComplete="off"
+                inputMode="numeric"
+                maxLength={20}
                 onChange={(e) => setScanCode(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -940,7 +951,7 @@ function Inventory() {
                 {filtered.map((p) => (
                     <tr key={p.id} className="hover:bg-muted/30">
                       <td className="p-3 font-mono text-xs text-muted-foreground">
-                        {p.article_number ?? p.barcode}
+                        {p.article_number}
                       </td>
                       <td className="p-3 font-medium">{p.name}</td>
                       <td className="p-3 text-muted-foreground">{p.sub_brand ?? "-"}</td>

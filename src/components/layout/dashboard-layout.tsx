@@ -10,10 +10,12 @@ import {
   Menu,
   Moon,
   Sun,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import { signOut } from "@/lib/auth";
 import logo from "@/assets/logo.png";
 
 const nav = [
@@ -41,6 +43,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [nightMode, setNightMode] = useState(getInitialNightMode);
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
+
+  const handleSignOut = () => {
+    signOut();
+    window.location.href = "/signin";
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", nightMode);
@@ -106,6 +113,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           >
             {nightMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
             <span className="hidden sm:inline">{nightMode ? "Day" : "Night"}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2 hover:border-destructive/40 hover:text-destructive"
+            onClick={handleSignOut}
+          >
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">Sign out</span>
           </Button>
         </header>
         <main className="flex-1 p-4 lg:p-6 2xl:p-10 max-w-[1920px] w-full mx-auto">{children}</main>
