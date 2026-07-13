@@ -8,7 +8,6 @@ import {
 import {
   createReceipt,
   getDraftReceipt,
-  listRecentReceipts,
   saveDraftReceipt,
 } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
@@ -25,7 +24,6 @@ import {
 } from "@/components/ui/select";
 import {
   Camera,
-  ChevronDown,
   Printer,
   RotateCcw,
   ScanLine,
@@ -62,6 +60,14 @@ type ReceiptDraft = {
   totalOverride: string;
   changeOverride: string;
 };
+
+type InventorySort =
+  | "recently-updated"
+  | "recently-sold"
+  | "stock-low"
+  | "stock-high"
+  | "price-low"
+  | "price-high";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "Inventory — SportsWear Inventory" }] }),
@@ -125,6 +131,7 @@ const textCodeFromOcr = (text: string) => {
 
 const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
+const QUICK_SALES_KEY = "original-sport-quick-sales";
 
 const readReceiptDraft = (): ReceiptDraft | null => {
   if (typeof window === "undefined") return null;
@@ -164,9 +171,24 @@ const readReceiptDraft = (): ReceiptDraft | null => {
   }
 };
 
+const readQuickSales = () => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(QUICK_SALES_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
 function Inventory() {
   const [q, setQ] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
+  const [inventorySort, setInventorySort] = useState<InventorySort>("recently-updated");
+  const [quickSaleIds, setQuickSaleIds] = useState<string[]>(() => readQuickSales());
+  const [quickSalesEditing, setQuickSalesEditing] = useState(false);
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
   const [cameraActive, setCameraActive] = useState(false);
@@ -207,15 +229,10 @@ function Inventory() {
   const [changeOverride, setChangeOverride] = useState(
     () => readReceiptDraft()?.changeOverride ?? "",
   );
-  const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["inventory"],
     queryFn: async () => listInventory(),
-  });
-  const { data: recentReceipts } = useQuery({
-    queryKey: ["recent-receipts"],
-    queryFn: async () => listRecentReceipts(),
   });
   // Shared with any other device (e.g. a monitor) looking at this same page -
   // whichever device scans pushes here, everyone else picks it up on poll.
@@ -239,17 +256,48 @@ function Inventory() {
     return Array.from(brands).sort((a, b) => a.localeCompare(b));
   }, [data]);
   const filtered = useMemo(
-    () =>
-      (data ?? []).filter((p) => {
+    () => {
+      const items = (data ?? []).filter((p) => {
         if (brandFilter !== "all" && p.sub_brand !== brandFilter) return false;
         if (!q) return true;
         return (
           p.name.toLowerCase().includes(q.toLowerCase()) ||
           p.article_number?.includes(q)
         );
-      }),
-    [data, q, brandFilter],
+      });
+
+      return [...items].sort((a, b) => {
+        switch (inventorySort) {
+          case "recently-sold":
+            return (
+              new Date(b.last_sold_at ?? 0).getTime() -
+              new Date(a.last_sold_at ?? 0).getTime()
+            );
+          case "stock-low":
+            return a.quantity - b.quantity;
+          case "stock-high":
+            return b.quantity - a.quantity;
+          case "price-low":
+            return Number(a.selling_price) - Number(b.selling_price);
+          case "price-high":
+            return Number(b.selling_price) - Number(a.selling_price);
+          case "recently-updated":
+          default:
+            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        }
+      });
+    },
+    [data, q, brandFilter, inventorySort],
   );
+  const quickSaleProducts = useMemo(() => {
+    const products = data ?? [];
+    return quickSaleIds
+      .map((id) => products.find((product) => product.id === id))
+      .filter(
+        (product): product is NonNullable<(typeof products)[number]> =>
+          Boolean(product) && product.quantity > 0,
+      );
+  }, [data, quickSaleIds]);
   const receiptSubtotal = receiptItems.reduce(
     (sum, item) => sum + item.quantity * item.unit_price,
     0,
@@ -424,6 +472,11 @@ function Inventory() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    window.localStorage.setItem(QUICK_SALES_KEY, JSON.stringify(quickSaleIds));
+  }, [quickSaleIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     const hasDraft =
       receiptItems.length > 0 ||
@@ -583,6 +636,21 @@ function Inventory() {
     adjustStock.mutate({ article_number: articleNumber, mode: scanMode });
   };
 
+  const addQuickSaleProduct = (productId: string) => {
+    setQuickSaleIds((ids) => (ids.includes(productId) ? ids : [...ids, productId]));
+  };
+
+  const removeQuickSaleProduct = (productId: string) => {
+    setQuickSaleIds((ids) => ids.filter((id) => id !== productId));
+  };
+
+  const sellQuickProduct = (articleNumber: string) => {
+    if (adjustStock.isPending) return;
+    setScanMode("remove");
+    setScanCode(articleNumber);
+    adjustStock.mutate({ article_number: articleNumber, mode: "remove" });
+  };
+
   const handleCameraTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     if (event.touches.length === 2) {
       pinchDistanceRef.current = touchDistance(event.touches);
@@ -703,14 +771,64 @@ function Inventory() {
       </Card>
 
       <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-medium">Receipt</div>
-            <p className="text-xs text-muted-foreground">
-              Items removed via scan are added here. Save to print.
-            </p>
+            <div className="text-sm font-medium">Quick sales</div>
           </div>
-          {receiptItems.length > 0 && (
+          {quickSaleProducts.length > 0 && (
+            <Button
+              type="button"
+              variant={quickSalesEditing ? "default" : "outline"}
+              size="sm"
+              onClick={() => setQuickSalesEditing((editing) => !editing)}
+            >
+              {quickSalesEditing ? "Save" : "Edit"}
+            </Button>
+          )}
+        </div>
+        {quickSaleProducts.length === 0 ? (
+          <div className="py-4 text-sm text-muted-foreground">
+            Add products from the inventory list below.
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {quickSaleProducts.map((product) => (
+              <div key={product.id} className="relative max-w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-w-0 max-w-full justify-start px-3"
+                  disabled={quickSalesEditing || adjustStock.isPending || product.quantity <= 0}
+                  onClick={() => sellQuickProduct(product.article_number)}
+                >
+                  <ShoppingCart className="size-4 shrink-0" />
+                  <span className="truncate">{product.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {money(product.selling_price)}
+                  </span>
+                </Button>
+                {quickSalesEditing && (
+                  <button
+                    type="button"
+                    className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full border bg-destructive text-destructive-foreground shadow-sm"
+                    onClick={() => removeQuickSaleProduct(product.id)}
+                    aria-label={`Remove ${product.name} from quick sales`}
+                  >
+                    <span className="h-0.5 w-2.5 rounded-full bg-current" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {receiptItems.length > 0 && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">Receipt</div>
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -721,61 +839,57 @@ function Inventory() {
               <Trash2 className="size-4 mr-1.5" />
               {returnReceiptStock.isPending ? "Returning..." : "Clear"}
             </Button>
-          )}
-        </div>
-
-        {receiptItems.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            No items scanned yet.
           </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-muted-foreground">
-                  <tr className="text-left">
-                    <th className="py-1 pr-2 font-medium">Qty</th>
-                    <th className="py-1 pr-2 font-medium">Description</th>
-                    <th className="py-1 pr-2 text-right font-medium">Price</th>
-                    <th className="py-1 pr-2 text-right font-medium">Total</th>
-                    <th className="py-1 text-right font-medium">Action</th>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted-foreground">
+                <tr className="text-left">
+                  <th className="py-1 pr-2 font-medium">Qty</th>
+                  <th className="py-1 pr-2 font-medium">Description</th>
+                  <th className="py-1 pr-2 text-right font-medium">Price</th>
+                  <th className="py-1 pr-2 text-right font-medium">Total</th>
+                  <th className="py-1 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {receiptItems.map((item, index) => (
+                  <tr key={item.product_id ?? item.description}>
+                    <td className="py-1.5 pr-2 tabular-nums">{item.quantity}</td>
+                    <td className="py-1.5 pr-2">{item.description}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">
+                      {money(item.unit_price)}
+                    </td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">
+                      {money(item.quantity * item.unit_price)}
+                    </td>
+                    <td className="py-1.5 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={returnReceiptStock.isPending}
+                        onClick={() => void removeOneReceiptItem(item, index)}
+                      >
+                        <RotateCcw className="size-4 mr-1.5" />
+                        Remove 1
+                      </Button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {receiptItems.map((item, index) => (
-                    <tr key={item.product_id ?? item.description}>
-                      <td className="py-1.5 pr-2 tabular-nums">{item.quantity}</td>
-                      <td className="py-1.5 pr-2">{item.description}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        {money(item.unit_price)}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">
-                        {money(item.quantity * item.unit_price)}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={returnReceiptStock.isPending}
-                          onClick={() => void removeOneReceiptItem(item, index)}
-                        >
-                          <RotateCcw className="size-4 mr-1.5" />
-                          Remove 1
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end gap-4 text-sm font-semibold">
-              <span>Items: {receiptItemCount}</span>
-              <span>Subtotal: {money(receiptSubtotal)}</span>
-            </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end gap-4 text-sm font-semibold">
+            <span>Total items: {receiptItemCount}</span>
+            <span>Subtotal: {money(receiptSubtotal)}</span>
+          </div>
+
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Apply discount</Label>
-              <div className="flex flex-wrap gap-2">
+              <Label className="block">Apply discount</Label>
+              <div className="flex flex-wrap gap-3">
                 <Button
                   type="button"
                   variant={discountMode === "none" ? "default" : "outline"}
@@ -814,14 +928,17 @@ function Inventory() {
                   Custom
                 </Button>
               </div>
-              {discountMode === "custom" && (
+            </div>
+
+            {discountMode === "custom" && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-discount-percent">Custom percent</Label>
                 <Input
+                  id="custom-discount-percent"
                   className="max-w-40"
                   inputMode="decimal"
-                  min="0"
-                  max="100"
                   placeholder="Percent"
-                  type="number"
+                  type="text"
                   value={customDiscountPercent}
                   onChange={(e) => {
                     setCustomDiscountPercent(e.target.value);
@@ -833,132 +950,78 @@ function Inventory() {
                     setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
                   }}
                 />
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="discount-amount">Discount amount</Label>
-                <Input
-                  id="discount-amount"
-                  className="max-w-40"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  type="number"
-                  value={discountOverride}
-                  onChange={(e) => setDiscountOverride(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Percent buttons fill this in - edit it directly to round.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Label htmlFor="total-amount" className="text-sm font-semibold">
-                Total
-              </Label>
-              <Input
-                id="total-amount"
-                className="max-w-28 text-right font-semibold"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                type="number"
-                value={totalOverride !== "" ? totalOverride : suggestedTotal.toFixed(2)}
-                onChange={(e) => setTotalOverride(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="cash-paid">Cash paid (optional)</Label>
-                <Input
-                  id="cash-paid"
-                  type="number"
-                  step="0.01"
-                  value={cashPaid}
-                  onChange={(e) => setCashPaid(e.target.value)}
-                />
-              </div>
-            </div>
-            {cashPaid.trim().length > 0 && (
-              <div className="flex items-center justify-end gap-2">
-                <Label htmlFor="change-amount" className="text-sm font-semibold">
-                  Change
-                </Label>
-                <Input
-                  id="change-amount"
-                  className="max-w-28 text-right font-semibold"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  type="number"
-                  value={changeOverride !== "" ? changeOverride : suggestedChange.toFixed(2)}
-                  onChange={(e) => setChangeOverride(e.target.value)}
-                />
               </div>
             )}
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              disabled={saveReceipt.isPending || returnReceiptStock.isPending}
-              onClick={() => {
-                // Open the tab synchronously within the click handler - Safari
-                // blocks window.open() called later from an async onSuccess.
-                printWindowRef.current = window.open("about:blank", "_blank");
-                saveReceipt.mutate();
-              }}
-            >
-              <Printer className="size-4 mr-1.5" />
-              {saveReceipt.isPending ? "Saving…" : "Save & Print"}
-            </Button>
-          </>
-        )}
-      </Card>
 
-      {recentReceipts && recentReceipts.length > 0 && (
-        <Card className="p-4 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">Recent receipts</div>
-              <p className="text-xs text-muted-foreground">
-                {recentReceipts.length} saved receipt(s)
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setRecentReceiptsOpen((open) => !open)}
-            >
-              <ChevronDown
-                className={`size-4 transition-transform ${recentReceiptsOpen ? "rotate-180" : ""}`}
+            <div className="space-y-2">
+              <Label htmlFor="discount-amount">Discount amount</Label>
+              <Input
+                id="discount-amount"
+                className="max-w-40"
+                inputMode="decimal"
+                placeholder="0.00"
+                type="text"
+                value={discountOverride}
+                onChange={(e) => setDiscountOverride(e.target.value)}
               />
-              {recentReceiptsOpen ? "Hide" : "Show"}
-            </Button>
+            </div>
           </div>
-          {recentReceiptsOpen && (
-            <div className="divide-y divide-border">
-              {recentReceipts.map((receipt) => (
-                <div key={receipt.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <span className="font-medium">#{receipt.invoice_number}</span>{" "}
-                    <span className="text-muted-foreground">
-                      {receipt.item_count} item(s) · {money(receipt.total)} ·{" "}
-                      {new Date(receipt.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => window.open(`/print/receipt/${receipt.id}`, "_blank")}
-                  >
-                    <Printer className="size-4 mr-1.5" />
-                    Print
-                  </Button>
-                </div>
-              ))}
+
+          <div className="flex items-center justify-end gap-3">
+            <Label htmlFor="total-amount" className="text-sm font-semibold">
+              Total
+            </Label>
+            <Input
+              id="total-amount"
+              className="max-w-28 text-right font-semibold"
+              inputMode="decimal"
+              type="text"
+              value={totalOverride !== "" ? totalOverride : suggestedTotal.toFixed(2)}
+              onChange={(e) => setTotalOverride(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cash-paid">Cash paid (optional)</Label>
+            <Input
+              id="cash-paid"
+              className="max-w-40"
+              inputMode="decimal"
+              type="text"
+              value={cashPaid}
+              onChange={(e) => setCashPaid(e.target.value)}
+            />
+          </div>
+
+          {cashPaid.trim().length > 0 && (
+            <div className="flex items-center justify-end gap-3">
+              <Label htmlFor="change-amount" className="text-sm font-semibold">
+                Change
+              </Label>
+              <Input
+                id="change-amount"
+                className="max-w-28 text-right font-semibold"
+                inputMode="decimal"
+                type="text"
+                value={changeOverride !== "" ? changeOverride : suggestedChange.toFixed(2)}
+                onChange={(e) => setChangeOverride(e.target.value)}
+              />
             </div>
           )}
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            disabled={saveReceipt.isPending || returnReceiptStock.isPending}
+            onClick={() => {
+              // Open the tab synchronously within the click handler - Safari
+              // blocks window.open() called later from an async onSuccess.
+              printWindowRef.current = window.open("about:blank", "_blank");
+              saveReceipt.mutate();
+            }}
+          >
+            <Printer className="size-4 mr-1.5" />
+            {saveReceipt.isPending ? "Saving…" : "Save & Print"}
+          </Button>
         </Card>
       )}
 
@@ -985,13 +1048,29 @@ function Inventory() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={inventorySort}
+          onValueChange={(value) => setInventorySort(value as InventorySort)}
+        >
+          <SelectTrigger className="w-full sm:w-52">
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="recently-updated">Recently updated</SelectItem>
+            <SelectItem value="recently-sold">Most recently sold</SelectItem>
+            <SelectItem value="stock-low">Lowest stock</SelectItem>
+            <SelectItem value="stock-high">Highest stock</SelectItem>
+            <SelectItem value="price-low">Lowest price</SelectItem>
+            <SelectItem value="price-high">Highest price</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <Card className="overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-10 text-center text-muted-foreground">No items.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
@@ -999,12 +1078,20 @@ function Inventory() {
                   <th className="p-3 font-medium">Brand</th>
                   <th className="p-3 font-medium text-right">Retail Price</th>
                   <th className="p-3 font-medium text-right">Current</th>
+                  <th className="p-3 font-medium">Last sold</th>
                   <th className="p-3 font-medium">Last updated</th>
+                  <th className="p-3 font-medium text-right">Quick sale</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((p) => (
-                    <tr key={p.id} className="hover:bg-muted/30">
+                    <tr
+                      key={p.id}
+                      className="cursor-pointer hover:bg-muted/30"
+                      onClick={() => {
+                        sellQuickProduct(p.article_number);
+                      }}
+                    >
                       <td className="p-3 font-mono text-xs text-muted-foreground">
                         {p.article_number}
                       </td>
@@ -1013,7 +1100,24 @@ function Inventory() {
                       <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
                       <td className="p-3 text-muted-foreground text-xs">
+                        {p.last_sold_at ? new Date(p.last_sold_at).toLocaleString() : "-"}
+                      </td>
+                      <td className="p-3 text-muted-foreground text-xs">
                         {new Date(p.updated_at).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={quickSaleIds.includes(p.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            addQuickSaleProduct(p.id);
+                          }}
+                        >
+                          {quickSaleIds.includes(p.id) ? "Added" : "Add"}
+                        </Button>
                       </td>
                     </tr>
                   ))}

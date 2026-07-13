@@ -15,9 +15,27 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
       | "min_stock"
       | "selling_price"
       | "updated_at"
-    >
+    > & {
+      last_sold_at: string | null;
+    }
   >(
-    "select id, article_number, name, sub_brand, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
+    `select
+       p.id,
+       p.article_number,
+       p.name,
+       p.sub_brand,
+       p.quantity,
+       p.min_stock,
+       p.selling_price,
+       p.updated_at,
+       max(a.created_at) as last_sold_at
+     from products p
+     left join activity_logs a
+       on a.entity_id = p.id
+      and a.action = 'scanned_out'
+     where p.quantity > 0
+     group by p.id
+     order by p.updated_at desc`,
   );
 });
 
