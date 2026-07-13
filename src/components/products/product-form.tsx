@@ -176,18 +176,18 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         <Card className="p-5 md:col-span-2 space-y-4">
           <h2 className="font-semibold">Basics</h2>
           <div className="space-y-1.5">
-            <Label htmlFor="barcode">Article number</Label>
+            <Label htmlFor="article_number">Article number</Label>
             <Input
-              id="barcode"
+              id="article_number"
               autoFocus
-              {...register("barcode")}
-              ref={(el) => {
-                register("barcode").ref(el);
-                barcodeRef.current = el;
-              }}
+              inputMode="numeric"
+              maxLength={10}
+              {...register("article_number")}
               placeholder="Scan or type article number..."
             />
-            {errors.barcode && <p className="text-xs text-destructive">{errors.barcode.message}</p>}
+            {errors.article_number && (
+              <p className="text-xs text-destructive">{errors.article_number.message}</p>
+            )}
             <p className="text-xs text-muted-foreground">
               Scanners auto-fill this field when focused.
             </p>
