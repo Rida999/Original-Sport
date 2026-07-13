@@ -4,6 +4,7 @@ import {
   adjustProductStockByArticleNumber,
   listInventory,
   restoreReceiptStock,
+  setProductQuickSale,
 } from "@/server/inventory";
 import {
   createReceipt,
@@ -131,7 +132,6 @@ const textCodeFromOcr = (text: string) => {
 
 const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
-const QUICK_SALES_KEY = "original-sport-quick-sales";
 
 const readReceiptDraft = (): ReceiptDraft | null => {
   if (typeof window === "undefined") return null;
@@ -171,23 +171,10 @@ const readReceiptDraft = (): ReceiptDraft | null => {
   }
 };
 
-const readQuickSales = () => {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(QUICK_SALES_KEY);
-    const ids = raw ? JSON.parse(raw) : [];
-    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 function Inventory() {
   const [q, setQ] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
   const [inventorySort, setInventorySort] = useState<InventorySort>("recently-updated");
-  const [quickSaleIds, setQuickSaleIds] = useState<string[]>(() => readQuickSales());
   const [quickSalesEditing, setQuickSalesEditing] = useState(false);
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
@@ -244,6 +231,14 @@ function Inventory() {
   const syncDraft = useMutation({
     mutationFn: async (items: ReceiptLine[]) => saveDraftReceipt({ data: { items } }),
   });
+  const toggleQuickSale = useMutation({
+    mutationFn: async ({ id, quick_sale }: { id: string; quick_sale: boolean }) =>
+      setProductQuickSale({ data: { id, quick_sale } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const pushDraft = (items: ReceiptLine[]) => {
     lastPushedDraftRef.current = JSON.stringify(items);
     syncDraft.mutate(items);
@@ -290,14 +285,8 @@ function Inventory() {
     [data, q, brandFilter, inventorySort],
   );
   const quickSaleProducts = useMemo(() => {
-    const products = data ?? [];
-    return quickSaleIds
-      .map((id) => products.find((product) => product.id === id))
-      .filter(
-        (product): product is NonNullable<(typeof products)[number]> =>
-          Boolean(product) && product.quantity > 0,
-      );
-  }, [data, quickSaleIds]);
+    return (data ?? []).filter((product) => product.quick_sale && product.quantity > 0);
+  }, [data]);
   const receiptSubtotal = receiptItems.reduce(
     (sum, item) => sum + item.quantity * item.unit_price,
     0,
@@ -472,11 +461,6 @@ function Inventory() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(QUICK_SALES_KEY, JSON.stringify(quickSaleIds));
-  }, [quickSaleIds]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
 
     const hasDraft =
       receiptItems.length > 0 ||
@@ -634,14 +618,6 @@ function Inventory() {
       return;
     }
     adjustStock.mutate({ article_number: articleNumber, mode: scanMode });
-  };
-
-  const addQuickSaleProduct = (productId: string) => {
-    setQuickSaleIds((ids) => (ids.includes(productId) ? ids : [...ids, productId]));
-  };
-
-  const removeQuickSaleProduct = (productId: string) => {
-    setQuickSaleIds((ids) => ids.filter((id) => id !== productId));
   };
 
   const sellQuickProduct = (articleNumber: string) => {
@@ -811,7 +787,9 @@ function Inventory() {
                   <button
                     type="button"
                     className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full border bg-destructive text-destructive-foreground shadow-sm"
-                    onClick={() => removeQuickSaleProduct(product.id)}
+                    onClick={() =>
+                      toggleQuickSale.mutate({ id: product.id, quick_sale: false })
+                    }
                     aria-label={`Remove ${product.name} from quick sales`}
                   >
                     <span className="h-0.5 w-2.5 rounded-full bg-current" />
@@ -1110,13 +1088,13 @@ function Inventory() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={quickSaleIds.includes(p.id)}
+                          disabled={p.quick_sale || toggleQuickSale.isPending}
                           onClick={(event) => {
                             event.stopPropagation();
-                            addQuickSaleProduct(p.id);
+                            toggleQuickSale.mutate({ id: p.id, quick_sale: true });
                           }}
                         >
-                          {quickSaleIds.includes(p.id) ? "Added" : "Add"}
+                          {p.quick_sale ? "Added" : "Add"}
                         </Button>
                       </td>
                     </tr>
