@@ -76,10 +76,8 @@ export const createReceipt = createServerFn({ method: "POST" })
 
       const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
-      // Prices are tax-inclusive, so the VAT amount is the portion of the
-      // total that represents tax, not an additional charge on top.
       const total = Math.max(0, subtotal - discount);
-      const vatAmount = total - total / (1 + VAT_RATE / 100);
+      const vatAmount = total * (VAT_RATE / 100);
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, cashPaid - total);
 
@@ -169,6 +167,36 @@ export const listAllReceipts = createServerFn({ method: "GET" }).handler(async (
   );
   return rows.map(toReceipt);
 });
+
+export type ReceiptDraftLine = {
+  product_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+};
+
+// Single shared row, not per-user - a phone scanning items and a monitor
+// watching the same page both read/write this so they stay in sync via
+// polling (see refetchInterval on the client query).
+export const getDraftReceipt = createServerFn({ method: "GET" }).handler(async () => {
+  const { one } = await import("./db.server");
+  const row = await one<{ items: ReceiptDraftLine[]; updated_at: string }>(
+    "select items, updated_at from receipt_draft where id = 'default'",
+  );
+  return { items: row?.items ?? [], updated_at: row?.updated_at ?? null };
+});
+
+export const saveDraftReceipt = createServerFn({ method: "POST" })
+  .validator((data: { items: ReceiptDraftLine[] }) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    await one(
+      `insert into receipt_draft (id, items, updated_at) values ('default', $1, now())
+       on conflict (id) do update set items = excluded.items, updated_at = excluded.updated_at`,
+      [JSON.stringify(data.items)],
+    );
+    return { ok: true };
+  });
 
 export const getReceipt = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => data)

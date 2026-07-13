@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { signOut } from "@/lib/auth";
+import logo from "@/assets/logo.png";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -62,16 +63,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           open ? "translate-x-0 flex" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-          <div className="size-8 rounded-full border border-sidebar-border grid place-items-center shrink-0">
-            <span className="text-[10px] font-black tracking-tight text-sidebar-foreground">
-              OS
-            </span>
-          </div>
-          <span className="text-sm tracking-tight text-sidebar-foreground leading-none">
-            <span className="font-black uppercase">Original</span>{" "}
-            <span className="italic font-light">Sport</span>
-          </span>
+        <div className="h-24 flex items-center justify-center border-b border-sidebar-border p-2">
+          <img
+            src={logo}
+            alt="Original Sport"
+            className="h-full w-full object-contain dark:invert"
+          />
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           {nav.map(({ to, label, icon: Icon }) => (
@@ -80,9 +77,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               to={to}
               onClick={() => setOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
                 isActive(to)
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
               )}
             >
@@ -128,7 +125,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline">Sign out</span>
           </Button>
         </header>
-        <main className="flex-1 p-4 lg:p-6 max-w-screen-2xl w-full mx-auto">{children}</main>
+        <main className="flex-1 p-4 lg:p-6 2xl:p-10 max-w-[1920px] w-full mx-auto">{children}</main>
       </div>
     </div>
   );

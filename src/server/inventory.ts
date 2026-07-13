@@ -10,13 +10,14 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
       | "id"
       | "article_number"
       | "name"
+      | "sub_brand"
       | "quantity"
       | "min_stock"
       | "selling_price"
       | "updated_at"
     >
   >(
-    "select id, article_number, name, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
+    "select id, barcode, article_number, name, sub_brand, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 

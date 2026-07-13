@@ -116,6 +116,17 @@ CREATE TABLE IF NOT EXISTS receipt_items (
 
 CREATE INDEX IF NOT EXISTS receipt_items_receipt_id_idx ON receipt_items(receipt_id);
 
+-- Single shared row holding the receipt currently being built at the
+-- register, so a phone doing the scanning and a monitor watching the same
+-- page stay in sync (polled, not pushed).
+CREATE TABLE IF NOT EXISTS receipt_draft (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  items JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO receipt_draft (id) VALUES ('default') ON CONFLICT (id) DO NOTHING;
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

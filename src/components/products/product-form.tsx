@@ -2,9 +2,8 @@ import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { listCategoryOptions } from "@/server/categories";
 import { saveProduct } from "@/server/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,11 +110,6 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
     },
   });
 
-  const { data: categories } = useQuery({
-    queryKey: ["categories-list"],
-    queryFn: async () => listCategoryOptions(),
-  });
-
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
@@ -182,18 +176,18 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
         <Card className="p-5 md:col-span-2 space-y-4">
           <h2 className="font-semibold">Basics</h2>
           <div className="space-y-1.5">
-            <Label htmlFor="article_number">Article number</Label>
+            <Label htmlFor="barcode">Article number</Label>
             <Input
-              id="article_number"
+              id="barcode"
               autoFocus
-              inputMode="numeric"
-              maxLength={10}
-              {...register("article_number")}
+              {...register("barcode")}
+              ref={(el) => {
+                register("barcode").ref(el);
+                barcodeRef.current = el;
+              }}
               placeholder="Scan or type article number..."
             />
-            {errors.article_number && (
-              <p className="text-xs text-destructive">{errors.article_number.message}</p>
-            )}
+            {errors.barcode && <p className="text-xs text-destructive">{errors.barcode.message}</p>}
             <p className="text-xs text-muted-foreground">
               Scanners auto-fill this field when focused.
             </p>
@@ -204,22 +198,8 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <Field label="Category">
-              <Select
-                value={watch("category_id") ?? ""}
-                onValueChange={(v) => setValue("category_id", v || null)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Field label="Brand">
+              <Input {...register("sub_brand")} placeholder="Adidas, Nike, Puma…" />
             </Field>
             <Field label="Gender">
               <Select
@@ -236,6 +216,18 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
                   <SelectItem value="kids">Kids</SelectItem>
                 </SelectContent>
               </Select>
+            </Field>
+            <Field label="Product division">
+              <Input {...register("product_division")} />
+            </Field>
+            <Field label="Product line">
+              <Input {...register("product_line")} />
+            </Field>
+            <Field label="Product type">
+              <Input {...register("product_type")} />
+            </Field>
+            <Field label="Color">
+              <Input {...register("color")} />
             </Field>
             <Field label="Size">
               <Input

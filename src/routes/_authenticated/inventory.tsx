@@ -1,16 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { adjustProductStockByBarcode, listInventory, restoreReceiptStock } from "@/server/inventory";
 import {
-  adjustProductStockByArticleNumber,
-  listInventory,
-  restoreReceiptStock,
-} from "@/server/inventory";
-import { createReceipt, listRecentReceipts } from "@/server/receipts";
+  createReceipt,
+  getDraftReceipt,
+  listRecentReceipts,
+  saveDraftReceipt,
+} from "@/server/receipts";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Camera,
   ChevronDown,
@@ -46,6 +54,7 @@ type ReceiptDraft = {
   discountMode: "none" | "preset" | "custom";
   discountPercent: number;
   customDiscountPercent: string;
+  discountOverride: string;
 };
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -139,6 +148,8 @@ const readReceiptDraft = (): ReceiptDraft | null => {
       discountPercent: Number(draft.discountPercent) || 0,
       customDiscountPercent:
         typeof draft.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+      discountOverride:
+        typeof draft.discountOverride === "string" ? draft.discountOverride : "",
     };
   } catch {
     return null;
@@ -147,6 +158,7 @@ const readReceiptDraft = (): ReceiptDraft | null => {
 
 function Inventory() {
   const [q, setQ] = useState("");
+  const [brandFilter, setBrandFilter] = useState("all");
   const [scanCode, setScanCode] = useState("");
   const [scanMode, setScanMode] = useState<"remove" | "return">("remove");
   const [cameraActive, setCameraActive] = useState(false);
@@ -159,6 +171,8 @@ function Inventory() {
   const cameraZoomRef = useRef(DEFAULT_CAMERA_ZOOM);
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
+  const printWindowRef = useRef<Window | null>(null);
+  const lastPushedDraftRef = useRef("");
   const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
     () => readReceiptDraft()?.items ?? [],
   );
@@ -172,6 +186,11 @@ function Inventory() {
   const [customDiscountPercent, setCustomDiscountPercent] = useState(
     () => readReceiptDraft()?.customDiscountPercent ?? "",
   );
+  // The percent buttons just fill this in as a suggestion - typing directly
+  // in the discount amount field (e.g. to round it) overrides that.
+  const [discountOverride, setDiscountOverride] = useState(
+    () => readReceiptDraft()?.discountOverride ?? "",
+  );
   const [recentReceiptsOpen, setRecentReceiptsOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useQuery({
@@ -182,36 +201,73 @@ function Inventory() {
     queryKey: ["recent-receipts"],
     queryFn: async () => listRecentReceipts(),
   });
+  // Shared with any other device (e.g. a monitor) looking at this same page -
+  // whichever device scans pushes here, everyone else picks it up on poll.
+  const { data: draftReceipt } = useQuery({
+    queryKey: ["draft-receipt"],
+    queryFn: async () => getDraftReceipt(),
+    refetchInterval: 1500,
+  });
+  const syncDraft = useMutation({
+    mutationFn: async (items: ReceiptLine[]) => saveDraftReceipt({ data: { items } }),
+  });
+  const pushDraft = (items: ReceiptLine[]) => {
+    lastPushedDraftRef.current = JSON.stringify(items);
+    syncDraft.mutate(items);
+  };
+  const brandOptions = useMemo(() => {
+    const brands = new Set<string>();
+    for (const p of data ?? []) {
+      if (p.sub_brand) brands.add(p.sub_brand);
+    }
+    return Array.from(brands).sort((a, b) => a.localeCompare(b));
+  }, [data]);
   const filtered = useMemo(
     () =>
-      (data ?? []).filter(
-        (p) =>
-          !q ||
+      (data ?? []).filter((p) => {
+        if (brandFilter !== "all" && p.sub_brand !== brandFilter) return false;
+        if (!q) return true;
+        return (
           p.name.toLowerCase().includes(q.toLowerCase()) ||
-          p.article_number.includes(q),
-      ),
-    [data, q],
+          p.barcode.includes(q) ||
+          p.article_number?.includes(q)
+        );
+      }),
+    [data, q, brandFilter],
   );
   const receiptSubtotal = receiptItems.reduce(
     (sum, item) => sum + item.quantity * item.unit_price,
     0,
   );
   const activeDiscountPercent =
-    discountMode === "custom"
-      ? Math.min(100, Math.max(0, Number(customDiscountPercent) || 0))
-      : discountPercent;
-  const discountAmount = Math.min(
+    discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
+  const suggestedDiscount = Math.min(
     receiptSubtotal,
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
   );
+  const discountAmount =
+    discountOverride.trim() !== ""
+      ? Math.min(receiptSubtotal, Math.max(0, Number(discountOverride) || 0))
+      : suggestedDiscount;
   const receiptTotal = Math.max(0, receiptSubtotal - discountAmount);
+  const changeDue = Math.max(0, (Number(cashPaid) || 0) - receiptTotal);
+
+  const applyDiscountPercent = (mode: "none" | "preset" | "custom", percent: number) => {
+    setDiscountMode(mode);
+    setDiscountPercent(percent);
+    if (mode === "custom") return;
+    const suggestion = Math.min(receiptSubtotal, Math.max(0, receiptSubtotal * (percent / 100)));
+    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
+  };
 
   const resetReceipt = () => {
     setReceiptItems([]);
+    pushDraft([]);
     setCashPaid("");
     setDiscountMode("none");
     setDiscountPercent(0);
     setCustomDiscountPercent("");
+    setDiscountOverride("");
   };
 
   const invalidateStockQueries = () => {
@@ -243,19 +299,21 @@ function Inventory() {
           const product = result.product;
           setReceiptItems((prev) => {
             const idx = prev.findIndex((item) => item.product_id === product.id);
-            if (idx === -1) {
-              return [
-                ...prev,
-                {
-                  product_id: product.id,
-                  description: product.name,
-                  quantity: 1,
-                  unit_price: Number(product.selling_price),
-                },
-              ];
-            }
-            const next = [...prev];
-            next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+            const next =
+              idx === -1
+                ? [
+                    ...prev,
+                    {
+                      product_id: product.id,
+                      description: product.name,
+                      quantity: 1,
+                      unit_price: Number(product.selling_price),
+                    },
+                  ]
+                : prev.map((line, lineIndex) =>
+                    lineIndex === idx ? { ...line, quantity: line.quantity + 1 } : line,
+                  );
+            pushDraft(next);
             return next;
           });
         }
@@ -296,12 +354,20 @@ function Inventory() {
       }),
     onSuccess: (receipt) => {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
-      window.open(`/print/receipt/${receipt.id}`, "_blank");
+      const printUrl = `/print/receipt/${receipt.id}`;
+      if (printWindowRef.current) {
+        printWindowRef.current.location.href = printUrl;
+      } else {
+        window.open(printUrl, "_blank");
+      }
       resetReceipt();
       invalidateStockQueries();
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      printWindowRef.current?.close();
+      toast.error(e.message);
+    },
   });
 
   const clearReceipt = async () => {
@@ -318,13 +384,15 @@ function Inventory() {
     const result = await returnReceiptStock.mutateAsync([
       { product_id: item.product_id, quantity: 1 },
     ]);
-    setReceiptItems((prev) =>
-      prev.flatMap((line, lineIndex) => {
+    setReceiptItems((prev) => {
+      const next = prev.flatMap((line, lineIndex) => {
         if (lineIndex !== index) return [line];
         if (line.quantity <= 1) return [];
         return [{ ...line, quantity: line.quantity - 1 }];
-      }),
-    );
+      });
+      pushDraft(next);
+      return next;
+    });
     if (result.restored > 0) {
       toast.success("Returned 1 item to inventory");
     }
@@ -338,7 +406,8 @@ function Inventory() {
       cashPaid.trim().length > 0 ||
       discountMode !== "none" ||
       discountPercent > 0 ||
-      customDiscountPercent.trim().length > 0;
+      customDiscountPercent.trim().length > 0 ||
+      discountOverride.trim().length > 0;
 
     if (!hasDraft) {
       window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
@@ -353,9 +422,28 @@ function Inventory() {
         discountMode,
         discountPercent,
         customDiscountPercent,
+        discountOverride,
       } satisfies ReceiptDraft),
     );
-  }, [cashPaid, customDiscountPercent, discountMode, discountPercent, receiptItems]);
+  }, [
+    cashPaid,
+    customDiscountPercent,
+    discountMode,
+    discountOverride,
+    discountPercent,
+    receiptItems,
+  ]);
+
+  useEffect(() => {
+    if (!draftReceipt) return;
+    const fetched = JSON.stringify(draftReceipt.items);
+    // Skip if this is just the poll echoing back what we ourselves last
+    // pushed - only adopt it when some other device changed the shared draft.
+    if (fetched === lastPushedDraftRef.current) return;
+    if (fetched === JSON.stringify(receiptItems)) return;
+    lastPushedDraftRef.current = fetched;
+    setReceiptItems(draftReceipt.items);
+  }, [draftReceipt]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -503,17 +591,17 @@ function Inventory() {
               }}
               className="justify-start"
             >
-              <ToggleGroupItem value="remove" aria-label="Remove one item">
+              <ToggleGroupItem value="remove" aria-label="Sell one item">
                 <ShoppingCart className="size-4 mr-1.5" />
-                Remove
+                Sell
               </ToggleGroupItem>
-              <ToggleGroupItem value="return" aria-label="Add one item">
+              <ToggleGroupItem value="return" aria-label="Return one item">
                 <RotateCcw className="size-4 mr-1.5" />
-                Add
+                Return
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
-          <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="min-w-0 flex-1 max-w-sm space-y-1.5">
             <label htmlFor="stock-scan" className="text-sm font-medium">
               Article number
             </label>
@@ -552,7 +640,7 @@ function Inventory() {
             disabled={!scanCode.trim() || adjustStock.isPending}
             onClick={handleScan}
           >
-            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Add" : "Remove"}
+            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Return" : "Sell"}
           </Button>
         </div>
         {(cameraActive || cameraError) && (
@@ -662,8 +750,7 @@ function Inventory() {
                   variant={discountMode === "none" ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
-                    setDiscountMode("none");
-                    setDiscountPercent(0);
+                    applyDiscountPercent("none", 0);
                     setCustomDiscountPercent("");
                   }}
                 >
@@ -680,8 +767,7 @@ function Inventory() {
                     }
                     size="sm"
                     onClick={() => {
-                      setDiscountMode("preset");
-                      setDiscountPercent(percent);
+                      applyDiscountPercent("preset", percent);
                       setCustomDiscountPercent("");
                     }}
                   >
@@ -692,10 +778,7 @@ function Inventory() {
                   type="button"
                   variant={discountMode === "custom" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => {
-                    setDiscountMode("custom");
-                    setDiscountPercent(0);
-                  }}
+                  onClick={() => applyDiscountPercent("custom", 0)}
                 >
                   Custom
                 </Button>
@@ -710,20 +793,33 @@ function Inventory() {
                   type="number"
                   value={customDiscountPercent}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    if (!value) {
-                      setCustomDiscountPercent("");
-                      return;
-                    }
-                    setCustomDiscountPercent(String(Math.min(100, Math.max(0, Number(value)))));
+                    setCustomDiscountPercent(e.target.value);
+                    const pct = Number(e.target.value) || 0;
+                    const suggestion = Math.min(
+                      receiptSubtotal,
+                      Math.max(0, receiptSubtotal * (pct / 100)),
+                    );
+                    setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
                   }}
                 />
               )}
-              {discountAmount > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  Discount: -{money(discountAmount)}
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="discount-amount">Discount amount</Label>
+                <Input
+                  id="discount-amount"
+                  className="max-w-40"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  type="number"
+                  value={discountOverride}
+                  onChange={(e) => setDiscountOverride(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percent buttons fill this in - edit it directly to round.
+                </p>
+              </div>
             </div>
             <div className="flex justify-end text-sm font-semibold">
               Total: {money(receiptTotal)}
@@ -740,11 +836,21 @@ function Inventory() {
                 />
               </div>
             </div>
+            {cashPaid.trim().length > 0 && (
+              <div className="flex justify-end text-sm font-semibold">
+                Change: {money(changeDue)}
+              </div>
+            )}
             <Button
               type="button"
               className="w-full sm:w-auto"
               disabled={saveReceipt.isPending || returnReceiptStock.isPending}
-              onClick={() => saveReceipt.mutate()}
+              onClick={() => {
+                // Open the tab synchronously within the click handler - Safari
+                // blocks window.open() called later from an async onSuccess.
+                printWindowRef.current = window.open("about:blank", "_blank");
+                saveReceipt.mutate();
+              }}
             >
               <Printer className="size-4 mr-1.5" />
               {saveReceipt.isPending ? "Saving…" : "Save & Print"}
@@ -801,14 +907,29 @@ function Inventory() {
         </Card>
       )}
 
-      <div className="relative w-full sm:max-w-md">
-        <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Search…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <Select value={brandFilter} onValueChange={setBrandFilter}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All brands" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All brands</SelectItem>
+            {brandOptions.map((brand) => (
+              <SelectItem key={brand} value={brand}>
+                {brand}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <Card className="overflow-hidden">
         {filtered.length === 0 ? (
@@ -820,7 +941,8 @@ function Inventory() {
                 <tr className="text-left">
                   <th className="p-3 font-medium">Article number</th>
                   <th className="p-3 font-medium">Product</th>
-                  <th className="p-3 font-medium text-right">Price</th>
+                  <th className="p-3 font-medium">Brand</th>
+                  <th className="p-3 font-medium text-right">Retail Price</th>
                   <th className="p-3 font-medium text-right">Current</th>
                   <th className="p-3 font-medium">Last updated</th>
                 </tr>
@@ -832,6 +954,7 @@ function Inventory() {
                         {p.article_number}
                       </td>
                       <td className="p-3 font-medium">{p.name}</td>
+                      <td className="p-3 text-muted-foreground">{p.sub_brand ?? "-"}</td>
                       <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
                       <td className="p-3 text-right tabular-nums">{p.quantity}</td>
                       <td className="p-3 text-muted-foreground text-xs">

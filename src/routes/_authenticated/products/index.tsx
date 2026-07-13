@@ -16,6 +16,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   ChevronDown,
@@ -213,6 +220,7 @@ export const Route = createFileRoute("/_authenticated/products/")({
 
 function ProductsList() {
   const [q, setQ] = useState("");
+  const [brandFilter, setBrandFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUndoImport, setConfirmUndoImport] = useState<string | null>(null);
@@ -231,12 +239,21 @@ function ProductsList() {
     queryFn: async () => listImportBatches(),
   });
 
+  const brandOptions = useMemo(() => {
+    const brands = new Set<string>();
+    for (const p of data ?? []) {
+      if (p.sub_brand) brands.add(p.sub_brand);
+    }
+    return Array.from(brands).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const term = q.toLowerCase().trim();
-    if (!term) return data;
-    return data.filter((p) =>
-      [
+    return data.filter((p) => {
+      if (brandFilter !== "all" && p.sub_brand !== brandFilter) return false;
+      if (!term) return true;
+      return [
         p.name,
         p.model_name,
         p.article_number,
@@ -245,9 +262,9 @@ function ProductsList() {
         p.category?.name,
       ]
         .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(term)),
-    );
-  }, [data, q]);
+        .some((v) => String(v).toLowerCase().includes(term));
+    });
+  }, [data, q, brandFilter]);
   const totalStock = useMemo(
     () => (data ?? []).reduce((sum, product) => sum + Number(product.quantity || 0), 0),
     [data],
@@ -302,7 +319,7 @@ function ProductsList() {
           product_division: cell(row, "Product Division") || null,
           product_line: cell(row, "Product Line") || null,
           product_type: productType || null,
-          sub_brand: cell(row, "Sub Brand") || null,
+          sub_brand: cell(row, "Brand") || null,
           source_thumbnail: sourceThumbnail || embeddedImage || null,
           purchase_price: 0,
           selling_price: sellingPrice,
@@ -418,14 +435,29 @@ function ProductsList() {
         </div>
       </div>
 
-      <div className="relative w-full sm:max-w-md">
-        <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Search by name, article number, category..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search by name, article number, category..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <Select value={brandFilter} onValueChange={setBrandFilter}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All brands" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All brands</SelectItem>
+            {brandOptions.map((brand) => (
+              <SelectItem key={brand} value={brand}>
+                {brand}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Collapsible open={importHistoryOpen} onOpenChange={setImportHistoryOpen}>
@@ -514,9 +546,10 @@ function ProductsList() {
                 </th>
                 <th className="p-3 font-medium">Product</th>
                 <th className="p-3 font-medium">Article number</th>
+                <th className="p-3 font-medium">Brand</th>
                 <th className="p-3 font-medium">Category</th>
                 <th className="p-3 font-medium">Gender</th>
-                <th className="p-3 font-medium text-right">Price</th>
+                <th className="p-3 font-medium text-right">Retail Price</th>
                 <th className="p-3 font-medium text-right">Stock</th>
                 <th className="p-3 font-medium">Status</th>
                 <th className="p-3 w-12"></th>
@@ -526,14 +559,14 @@ function ProductsList() {
               {isLoading &&
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={9} className="p-3">
+                    <td colSpan={10} className="p-3">
                       <Skeleton className="h-8" />
                     </td>
                   </tr>
                 ))}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-10 text-center text-muted-foreground">
                     No products.{" "}
                     <Link to="/products/new" className="text-primary hover:underline">
                       Add your first
@@ -543,18 +576,8 @@ function ProductsList() {
                 </tr>
               )}
               {filtered.map((p) => {
-                const status =
-                  p.quantity === 0
-                    ? "Out of stock"
-                    : p.quantity <= 5
-                      ? "Low stock"
-                      : "Available";
-                const variant =
-                  p.quantity === 0
-                    ? "destructive"
-                    : p.quantity <= 5
-                      ? "warning"
-                      : "default";
+                const status = p.quantity === 0 ? "Out of stock" : "Available";
+                const variant = p.quantity === 0 ? "destructive" : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
                     <td className="p-3">
@@ -573,6 +596,7 @@ function ProductsList() {
                     <td className="p-3 font-mono text-xs text-muted-foreground">
                       {p.article_number}
                     </td>
+                    <td className="p-3">{p.sub_brand ?? "-"}</td>
                     <td className="p-3">{p.category?.name ?? "-"}</td>
                     <td className="p-3">{formatGender(p.gender)}</td>
                     <td className="p-3 text-right tabular-nums">{money(p.selling_price)}</td>
