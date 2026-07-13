@@ -128,14 +128,20 @@ export const getSalesReport = createServerFn({ method: "GET" })
          select id, total
          from receipts
          where created_at >= ${range.start} and created_at < ${range.end}
+       ),
+       item_totals as (
+         select receipt_id, sum(quantity) as quantity
+         from receipt_items
+         where receipt_id in (select id from filtered_receipts)
+         group by receipt_id
        )
        select
          coalesce(sum(fr.total), 0)::numeric(12, 2) as total_income,
          count(fr.id)::int as receipt_count,
-         coalesce(sum(ri.quantity), 0)::int as total_items,
+         coalesce(sum(it.quantity), 0)::int as total_items,
          coalesce(avg(fr.total), 0)::numeric(12, 2) as average_receipt
        from filtered_receipts fr
-       left join receipt_items ri on ri.receipt_id = fr.id`,
+       left join item_totals it on it.receipt_id = fr.id`,
     );
 
     const chart = await query<{ label: string; income: string; receipts: number }>(
