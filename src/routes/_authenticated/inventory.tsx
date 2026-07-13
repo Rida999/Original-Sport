@@ -692,7 +692,13 @@ function Inventory() {
                 id="stock-scan"
                 ref={scanInputRef}
                 className="pl-9 font-mono"
-                placeholder="Scan text"
+                placeholder={
+                  adjustStock.isPending
+                    ? "Saving..."
+                    : scanMode === "return"
+                      ? "Scan to return"
+                      : "Scan to sell"
+                }
                 value={scanCode}
                 autoComplete="off"
                 inputMode="numeric"
@@ -715,13 +721,6 @@ function Inventory() {
           >
             {cameraActive ? <X className="size-4" /> : <Camera className="size-4" />}
             {cameraActive ? "Close" : "Camera"}
-          </Button>
-          <Button
-            className="md:w-32"
-            disabled={!scanCode.trim() || adjustStock.isPending}
-            onClick={handleScan}
-          >
-            {adjustStock.isPending ? "Saving..." : scanMode === "return" ? "Return" : "Sell"}
           </Button>
         </div>
         {(cameraActive || cameraError) && (
@@ -760,13 +759,23 @@ function Inventory() {
           if (!open) setQuickSalesEditing(false);
         }}
       >
-        <Card className="p-4 space-y-3">
+        <Card
+          className="cursor-pointer p-4 space-y-3 transition-colors hover:bg-muted/20"
+          onClick={() =>
+            setQuickSalesOpen((open) => {
+              const next = !open;
+              if (!next) setQuickSalesEditing(false);
+              return next;
+            })
+          }
+        >
           <div className="flex items-center justify-between gap-3">
             <CollapsibleTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
                 className="-ml-2 h-auto min-w-0 justify-start gap-2 px-2 py-1.5"
+                onClick={(event) => event.stopPropagation()}
               >
                 <ChevronDown
                   className={`size-4 shrink-0 transition-transform ${
@@ -784,7 +793,10 @@ function Inventory() {
                 type="button"
                 variant={quickSalesEditing ? "default" : "outline"}
                 size="sm"
-                onClick={() => setQuickSalesEditing((editing) => !editing)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setQuickSalesEditing((editing) => !editing);
+                }}
               >
                 {quickSalesEditing ? "Save" : "Edit"}
               </Button>
@@ -804,7 +816,10 @@ function Inventory() {
                       variant="outline"
                       className="min-w-0 max-w-full justify-start px-3"
                       disabled={quickSalesEditing || adjustStock.isPending || product.quantity <= 0}
-                      onClick={() => sellQuickProduct(product.article_number)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        sellQuickProduct(product.article_number);
+                      }}
                     >
                       <ShoppingCart className="size-4 shrink-0" />
                       <span className="truncate">{product.name}</span>
@@ -816,9 +831,10 @@ function Inventory() {
                       <button
                         type="button"
                         className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full border bg-destructive text-destructive-foreground shadow-sm"
-                        onClick={() =>
-                          toggleQuickSale.mutate({ id: product.id, quick_sale: false })
-                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleQuickSale.mutate({ id: product.id, quick_sale: false });
+                        }}
                         aria-label={`Remove ${product.name} from quick sales`}
                       >
                         <span className="h-0.5 w-2.5 rounded-full bg-current" />
