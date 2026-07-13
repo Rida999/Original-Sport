@@ -59,8 +59,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 border-r border-sidebar-border bg-sidebar flex-col transition-transform lg:translate-x-0 lg:flex",
-          open ? "translate-x-0 flex" : "-translate-x-full lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-60 border-r border-sidebar-border bg-sidebar flex-col transition-transform md:translate-x-0 md:flex",
+          open ? "translate-x-0 flex" : "-translate-x-full md:translate-x-0",
         )}
       >
         <div className="h-24 flex items-center justify-center border-b border-sidebar-border p-2">
@@ -92,12 +92,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Mobile overlay */}
       {open && (
-        <div onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-black/40 lg:hidden" />
+        <div onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-60">
-        <header className="h-14 border-b border-border flex items-center px-4 lg:px-6 gap-3">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}>
+      <div className="flex-1 flex flex-col min-w-0 md:pl-60">
+        <header className="h-14 border-b border-border flex items-center px-4 md:px-6 gap-3">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen(true)}>
             <Menu className="size-5" />
           </Button>
           <div className="text-sm text-muted-foreground capitalize">
@@ -125,7 +125,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline">Sign out</span>
           </Button>
         </header>
-        <main className="flex-1 p-4 lg:p-6 2xl:p-10 max-w-[1920px] w-full mx-auto">{children}</main>
+        <main className="flex-1 p-4 md:p-6 2xl:p-10 max-w-[1920px] w-full mx-auto">{children}</main>
       </div>
     </div>
   );
