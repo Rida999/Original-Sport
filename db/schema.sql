@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT,
   images TEXT[] NOT NULL DEFAULT '{}',
   source_thumbnail TEXT,
+  quick_sale BOOLEAN NOT NULL DEFAULT false,
   status product_status NOT NULL DEFAULT 'available',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE products DROP COLUMN IF EXISTS out_of_stock_since;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS quick_sale BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

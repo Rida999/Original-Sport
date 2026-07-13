@@ -2,7 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { Product } from "./products";
 
+const ensureProductQuickSaleColumn = async () => {
+  const { one } = await import("./db.server");
+  await one("alter table products add column if not exists quick_sale boolean not null default false");
+};
+
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
+  await ensureProductQuickSaleColumn();
   const { query } = await import("./db.server");
   return query<
     Pick<
@@ -16,6 +22,7 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
       | "selling_price"
       | "updated_at"
     > & {
+      quick_sale: boolean;
       last_sold_at: string | null;
     }
   >(
@@ -27,6 +34,7 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
        p.quantity,
        p.min_stock,
        p.selling_price,
+       p.quick_sale,
        p.updated_at,
        max(a.created_at) as last_sold_at
      from products p
@@ -38,6 +46,23 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
      order by p.updated_at desc`,
   );
 });
+
+export const setProductQuickSale = createServerFn({ method: "POST" })
+  .validator((data: { id: string; quick_sale: boolean }) => data)
+  .handler(async ({ data }) => {
+    await ensureProductQuickSaleColumn();
+    const { one } = await import("./db.server");
+    const product = await one<{ id: string; quick_sale: boolean }>(
+      `update products
+       set quick_sale = $2
+       where id = $1
+       returning id, quick_sale`,
+      [data.id, Boolean(data.quick_sale)],
+    );
+
+    if (!product) throw new Error("Product not found.");
+    return product;
+  });
 
 export const adjustProductStockByArticleNumber = createServerFn({ method: "POST" })
   .validator((data: { article_number: string; mode: "remove" | "return" }) => data)
