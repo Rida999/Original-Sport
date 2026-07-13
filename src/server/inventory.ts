@@ -17,7 +17,7 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
       | "updated_at"
     >
   >(
-    "select id, barcode, article_number, name, sub_brand, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
+    "select id, article_number, name, sub_brand, quantity, min_stock, selling_price, updated_at from products where quantity > 0 order by updated_at desc",
   );
 });
 
@@ -26,8 +26,8 @@ export const adjustProductStockByArticleNumber = createServerFn({ method: "POST"
   .handler(async ({ data }) => {
     const articleNumber = data.article_number.trim();
     if (!articleNumber) throw new Error("Article number is required.");
-    if (!/^\d{1,20}$/.test(articleNumber)) {
-      throw new Error("Article number must contain at most 20 digits.");
+    if (!/^[A-Za-z0-9 ]{1,20}$/.test(articleNumber)) {
+      throw new Error("Article number must be 20 characters or less with no special characters.");
     }
 
     const { one } = await import("./db.server");

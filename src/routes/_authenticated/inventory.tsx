@@ -546,8 +546,8 @@ function Inventory() {
   const handleScan = () => {
     const articleNumber = scanCode.trim();
     if (!articleNumber || adjustStock.isPending) return;
-    if (!/^\d{1,20}$/.test(articleNumber)) {
-      toast.error("Article number must contain at most 20 digits.");
+    if (!/^[A-Za-z0-9 ]{1,20}$/.test(articleNumber)) {
+      toast.error("Article number must be 20 characters or less with no special characters.");
       return;
     }
     adjustStock.mutate({ article_number: articleNumber, mode: scanMode });

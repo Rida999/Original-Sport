@@ -45,6 +45,43 @@ export type ImportBatch = {
   created_at: string;
 };
 
+let productsBarcodeColumnExists: boolean | null = null;
+
+type DbQuery = <T = { exists: boolean }>(text: string, values?: unknown[]) => Promise<T[]>;
+type DbClient = {
+  query: <T = { exists: boolean }>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
+};
+
+const hasProductsBarcodeColumn = async (dbQuery: DbQuery) => {
+  if (productsBarcodeColumnExists !== null) return productsBarcodeColumnExists;
+  const rows = await dbQuery<{ exists: boolean }>(
+    `select exists (
+       select 1
+       from information_schema.columns
+       where table_schema = current_schema()
+         and table_name = 'products'
+         and column_name = 'barcode'
+     )`,
+  );
+  productsBarcodeColumnExists = Boolean(rows[0]?.exists);
+  return productsBarcodeColumnExists;
+};
+
+const hasProductsBarcodeColumnClient = async (client: DbClient) => {
+  if (productsBarcodeColumnExists !== null) return productsBarcodeColumnExists;
+  const result = await client.query<{ exists: boolean }>(
+    `select exists (
+       select 1
+       from information_schema.columns
+       where table_schema = current_schema()
+         and table_name = 'products'
+         and column_name = 'barcode'
+     )`,
+  );
+  productsBarcodeColumnExists = Boolean(result.rows[0]?.exists);
+  return productsBarcodeColumnExists;
+};
+
 const productColumns = `
   p.id, p.article_number, p.name, p.model_name, p.category_id,
   p.key_category, p.age_group, p.gender, p.sport, p.marketing_line, p.product_division,
@@ -118,9 +155,30 @@ const productValues = (product: ProductInput) => [
 export const saveProduct = createServerFn({ method: "POST" })
   .validator((data: ProductInput) => data)
   .handler(async ({ data }) => {
-    const { one } = await import("./db.server");
-    const values = productValues(data);
+    const articleNumber = data.article_number.trim();
+    if (!/^[A-Za-z0-9 ]{1,20}$/.test(articleNumber)) {
+      throw new Error("Article number must be 20 characters or less with no special characters.");
+    }
+
+    const { one, query } = await import("./db.server");
+    const hasBarcodeColumn = await hasProductsBarcodeColumn(query);
+    const input = { ...data, article_number: articleNumber };
+    const values = productValues(input);
     if (data.id) {
+      if (hasBarcodeColumn) {
+        await one(
+          `update products set
+            barcode = $1, article_number = $2, name = $3, model_name = $4, category_id = $5,
+            key_category = $6, age_group = $7, gender = $8, sport = $9, marketing_line = $10,
+            product_division = $11, product_line = $12, product_type = $13, sub_brand = $14,
+            color = $15, size = $16, purchase_price = $17, selling_price = $18, quantity = $19,
+            min_stock = $20, description = $21, images = $22, source_thumbnail = $23, status = $24
+           where id = $25 returning id`,
+          [articleNumber, ...values, data.id],
+        );
+        return data.id;
+      }
+
       await one(
         `update products set
           article_number = $1, name = $2, model_name = $3, category_id = $4,
@@ -133,6 +191,26 @@ export const saveProduct = createServerFn({ method: "POST" })
       );
       return data.id;
     }
+    if (hasBarcodeColumn) {
+      const row = await one<{ id: string }>(
+        `insert into products (
+          barcode, article_number, name, model_name, category_id, key_category, age_group,
+          gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
+          color, size, purchase_price, selling_price, quantity, min_stock, description, images,
+          source_thumbnail, status
+        ) values (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24
+        ) returning id`,
+        [articleNumber, ...values],
+      );
+      await one(
+        "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
+        ["created", "product", row?.id, { name: input.name }],
+      );
+      return row?.id;
+    }
+
     const row = await one<{ id: string }>(
       `insert into products (
         article_number, name, model_name, category_id, key_category, age_group,
@@ -147,7 +225,7 @@ export const saveProduct = createServerFn({ method: "POST" })
     );
     await one(
       "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
-      ["created", "product", row?.id, { name: data.name }],
+      ["created", "product", row?.id, { name: input.name }],
     );
     return row?.id;
   });
@@ -190,6 +268,7 @@ export const importProducts = createServerFn({ method: "POST" })
         "select id, slug from categories",
       );
       const categoryId = new Map(categories.rows.map((row) => [row.slug, row.id]));
+      const hasBarcodeColumn = await hasProductsBarcodeColumnClient(client);
       for (const product of data.products) {
         const withIds = {
           ...product,
@@ -202,33 +281,61 @@ export const importProducts = createServerFn({ method: "POST" })
           withIds.article_number,
         ]);
         const previousProduct = previous.rows[0] ?? null;
-        const imported = await client.query<{ id: string; article_number: string; name: string }>(
-          `insert into products (
-            article_number, name, model_name, category_id, key_category, age_group,
-            gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
-            color, size, purchase_price, selling_price, quantity, min_stock, description, images,
-            source_thumbnail, status
-          ) values (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16, $17, $18, $19, $20, $21, $22, $23
-          )
-          on conflict (article_number) do update set
-            name = excluded.name, model_name = excluded.model_name,
-            category_id = excluded.category_id, key_category = excluded.key_category,
-            age_group = excluded.age_group, gender = excluded.gender, sport = excluded.sport,
-            marketing_line = excluded.marketing_line, product_division = excluded.product_division,
-            product_line = excluded.product_line, product_type = excluded.product_type, sub_brand = excluded.sub_brand,
-            purchase_price = excluded.purchase_price, selling_price = excluded.selling_price,
-            quantity = products.quantity + excluded.quantity,
-            min_stock = excluded.min_stock, images = excluded.images, source_thumbnail = excluded.source_thumbnail,
-            status = case
-              when products.quantity + excluded.quantity = 0 then 'out_of_stock'::product_status
-              when products.status = 'discontinued' then products.status
-              else 'available'::product_status
-            end
-          returning id, article_number, name`,
-          productValues(withIds),
-        );
+        const imported = hasBarcodeColumn
+          ? await client.query<{ id: string; article_number: string; name: string }>(
+              `insert into products (
+                barcode, article_number, name, model_name, category_id, key_category, age_group,
+                gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
+                color, size, purchase_price, selling_price, quantity, min_stock, description, images,
+                source_thumbnail, status
+              ) values (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                $17, $18, $19, $20, $21, $22, $23, $24
+              )
+              on conflict (barcode) do update set
+                article_number = excluded.article_number, name = excluded.name, model_name = excluded.model_name,
+                category_id = excluded.category_id, key_category = excluded.key_category,
+                age_group = excluded.age_group, gender = excluded.gender, sport = excluded.sport,
+                marketing_line = excluded.marketing_line, product_division = excluded.product_division,
+                product_line = excluded.product_line, product_type = excluded.product_type, sub_brand = excluded.sub_brand,
+                purchase_price = excluded.purchase_price, selling_price = excluded.selling_price,
+                quantity = products.quantity + excluded.quantity,
+                min_stock = excluded.min_stock, images = excluded.images, source_thumbnail = excluded.source_thumbnail,
+                status = case
+                  when products.quantity + excluded.quantity = 0 then 'out_of_stock'::product_status
+                  when products.status = 'discontinued' then products.status
+                  else 'available'::product_status
+                end
+              returning id, article_number, name`,
+              [withIds.article_number, ...productValues(withIds)],
+            )
+          : await client.query<{ id: string; article_number: string; name: string }>(
+              `insert into products (
+                article_number, name, model_name, category_id, key_category, age_group,
+                gender, sport, marketing_line, product_division, product_line, product_type, sub_brand,
+                color, size, purchase_price, selling_price, quantity, min_stock, description, images,
+                source_thumbnail, status
+              ) values (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                $16, $17, $18, $19, $20, $21, $22, $23
+              )
+              on conflict (article_number) do update set
+                name = excluded.name, model_name = excluded.model_name,
+                category_id = excluded.category_id, key_category = excluded.key_category,
+                age_group = excluded.age_group, gender = excluded.gender, sport = excluded.sport,
+                marketing_line = excluded.marketing_line, product_division = excluded.product_division,
+                product_line = excluded.product_line, product_type = excluded.product_type, sub_brand = excluded.sub_brand,
+                purchase_price = excluded.purchase_price, selling_price = excluded.selling_price,
+                quantity = products.quantity + excluded.quantity,
+                min_stock = excluded.min_stock, images = excluded.images, source_thumbnail = excluded.source_thumbnail,
+                status = case
+                  when products.quantity + excluded.quantity = 0 then 'out_of_stock'::product_status
+                  when products.status = 'discontinued' then products.status
+                  else 'available'::product_status
+                end
+              returning id, article_number, name`,
+              productValues(withIds),
+            );
         const productRow = imported.rows[0];
         if (productRow) {
           await client.query(
