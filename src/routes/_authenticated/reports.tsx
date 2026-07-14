@@ -1,21 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { Download, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
+import { CalendarDays, Download, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
 import { useState } from "react";
 
-import {
-  getSalesReport,
-  type SalesReportPeriod,
-} from "@/server/reports";
+import { getSalesReport, type SalesReportPeriod } from "@/server/reports";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { money } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/reports")({
@@ -36,11 +42,36 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+const localDateInputValue = (date = new Date()) => {
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 10);
+};
+
+const dateFromInputValue = (value: string) => new Date(`${value}T00:00:00`);
+const formatDayLabel = (value: string) => {
+  const date = dateFromInputValue(value);
+  return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+};
+const monthInputValue = (date = new Date()) => localDateInputValue(date).slice(0, 7);
+const currentYear = new Date().getFullYear();
+type ReportPickerMode = "day" | "month" | "year";
+
 function Reports() {
   const [period, setPeriod] = useState<SalesReportPeriod>("today");
+  const [selectedDate, setSelectedDate] = useState(localDateInputValue);
+  const [selectedMonth, setSelectedMonth] = useState(monthInputValue);
+  const [selectedYear, setSelectedYear] = useState(String(currentYear));
+  const [pickerMode, setPickerMode] = useState<ReportPickerMode>("day");
+  const [dateDialogOpen, setDateDialogOpen] = useState(false);
+  const reportDate =
+    period === "custom_month"
+      ? `${selectedMonth}-01`
+      : period === "custom_year"
+        ? `${selectedYear}-01-01`
+        : selectedDate;
   const { data: report, isLoading } = useQuery({
-    queryKey: ["sales-report", period],
-    queryFn: async () => getSalesReport({ data: { period } }),
+    queryKey: ["sales-report", period, reportDate],
+    queryFn: async () => getSalesReport({ data: { period, date: reportDate } }),
   });
 
   const exportCsv = () => {
@@ -67,11 +98,67 @@ function Reports() {
     const blob = new Blob([csv], { type: "text/csv" });
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(blob);
-    anchor.download = `sales-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `sales-${
+      period === "date" || period === "custom_month" || period === "custom_year"
+        ? reportDate
+        : period
+    }-${localDateInputValue()}.csv`;
     anchor.click();
   };
 
   const summary = report?.summary;
+  const activePeriodLabel =
+    period === "date"
+      ? `Day: ${formatDayLabel(selectedDate)}`
+      : period === "custom_month"
+        ? `Month: ${dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(undefined, {
+            month: "long",
+            year: "numeric",
+          })}`
+        : period === "custom_year"
+          ? `Year: ${selectedYear}`
+          : periodOptions.find((option) => option.value === period)?.label;
+  const selectedDateLabel = dateFromInputValue(selectedDate).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const selectedMonthLabel = dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(
+    undefined,
+    {
+      month: "long",
+      year: "numeric",
+    },
+  );
+  const selectedReportLabel =
+    pickerMode === "day"
+      ? selectedDateLabel
+      : pickerMode === "month"
+        ? selectedMonthLabel
+        : selectedYear;
+
+  const viewSelectedReport = () => {
+    setPeriod(
+      pickerMode === "day" ? "date" : pickerMode === "month" ? "custom_month" : "custom_year",
+    );
+    setDateDialogOpen(false);
+  };
+
+  const setPreviousPreset = () => {
+    const date = new Date();
+    if (pickerMode === "day") {
+      date.setDate(date.getDate() - 1);
+      setSelectedDate(localDateInputValue(date));
+      return;
+    }
+    if (pickerMode === "month") {
+      date.setMonth(date.getMonth() - 1);
+      setSelectedMonth(monthInputValue(date));
+      return;
+    }
+    setSelectedYear(String(currentYear - 1));
+  };
 
   return (
     <div className="space-y-4">
@@ -92,11 +179,135 @@ function Reports() {
               {option.label}
             </Button>
           ))}
+          <Button
+            type="button"
+            size="sm"
+            variant={
+              period === "date" || period === "custom_month" || period === "custom_year"
+                ? "default"
+                : "outline"
+            }
+            onClick={() => setDateDialogOpen(true)}
+          >
+            <CalendarDays className="size-4 mr-1.5" />
+            Previous report
+          </Button>
           <Button onClick={exportCsv} size="sm" variant="outline" disabled={!report}>
             <Download className="size-4 mr-1.5" /> Export
           </Button>
         </div>
       </div>
+
+      <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
+        <DialogContent className="max-w-[94vw] gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <div className="border-b bg-muted/30 px-5 py-4">
+            <DialogHeader className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CalendarDays className="size-5" />
+                </div>
+                <div>
+                  <DialogTitle>Select previous report date</DialogTitle>
+                  <DialogDescription>
+                    Pick a day, month, or year to review its sales, receipts, and sold products.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+          <div className="p-4 sm:p-5">
+            <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg bg-muted p-1">
+              {(["day", "month", "year"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  size="sm"
+                  variant={pickerMode === mode ? "default" : "ghost"}
+                  onClick={() => setPickerMode(mode)}
+                >
+                  {mode === "day" ? "Day" : mode === "month" ? "Month" : "Year"}
+                </Button>
+              ))}
+            </div>
+            <div className="flex min-h-[340px] items-center justify-center rounded-lg border bg-background p-2 shadow-sm sm:p-3">
+              {pickerMode === "day" ? (
+                <Calendar
+                  mode="single"
+                  selected={dateFromInputValue(selectedDate)}
+                  disabled={{ after: new Date() }}
+                  captionLayout="dropdown"
+                  className="rounded-md [--cell-size:2.25rem] sm:[--cell-size:2.65rem]"
+                  onSelect={(date) => {
+                    if (!date) return;
+                    setSelectedDate(localDateInputValue(date));
+                  }}
+                />
+              ) : pickerMode === "month" ? (
+                <div className="w-full max-w-xs space-y-3">
+                  <div>
+                    <div className="text-sm font-medium">Select month</div>
+                    <p className="text-xs text-muted-foreground">
+                      Choose any previous month or the current month.
+                    </p>
+                  </div>
+                  <Input
+                    type="month"
+                    value={selectedMonth}
+                    max={monthInputValue()}
+                    onChange={(event) => setSelectedMonth(event.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="w-full max-w-xs space-y-3">
+                  <div>
+                    <div className="text-sm font-medium">Select year</div>
+                    <p className="text-xs text-muted-foreground">
+                      Choose a previous year or the current year.
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min="2000"
+                    max={currentYear}
+                    value={selectedYear}
+                    onChange={(event) =>
+                      setSelectedYear(event.target.value.slice(0, 4) || String(currentYear))
+                    }
+                  />
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex flex-col gap-3 rounded-lg border bg-muted/25 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-xs font-medium uppercase text-muted-foreground">
+                  Selected report
+                </div>
+                <div className="truncate text-base font-semibold sm:text-lg">
+                  {selectedReportLabel}
+                </div>
+              </div>
+              <div className="flex gap-2 sm:shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={viewSelectedReport}
+                >
+                  View report
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={setPreviousPreset}
+                >
+                  Previous {pickerMode}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
@@ -129,7 +340,9 @@ function Reports() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">Income graph</h2>
-            <p className="text-xs text-muted-foreground">Receipt totals for the selected period</p>
+            <p className="text-xs text-muted-foreground">
+              Receipt totals for {activePeriodLabel ?? "the selected period"}
+            </p>
           </div>
           <div className="text-sm font-semibold tabular-nums">{money(summary?.totalIncome)}</div>
         </div>

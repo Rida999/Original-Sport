@@ -12,7 +12,7 @@ export type SoldProductReport = {
   last_sold_at: string;
 };
 
-export type SalesReportPeriod = "today" | "week" | "month";
+export type SalesReportPeriod = "today" | "week" | "month" | "date" | "custom_month" | "custom_year";
 
 export type SalesReport = {
   period: SalesReportPeriod;
@@ -82,6 +82,36 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
 });
 
 const salesPeriodSql = (period: SalesReportPeriod) => {
+  if (period === "custom_year") {
+    return {
+      start: "date_trunc('year', $1::date)",
+      end: "date_trunc('year', $1::date) + interval '1 year'",
+      step: "interval '1 month'",
+      bucket: "month",
+      label: "Mon",
+    };
+  }
+
+  if (period === "custom_month") {
+    return {
+      start: "date_trunc('month', $1::date)",
+      end: "date_trunc('month', $1::date) + interval '1 month'",
+      step: "interval '1 day'",
+      bucket: "day",
+      label: "Mon DD",
+    };
+  }
+
+  if (period === "date") {
+    return {
+      start: "$1::date",
+      end: "$1::date + interval '1 day'",
+      step: "interval '1 hour'",
+      bucket: "hour",
+      label: "HH24:00",
+    };
+  }
+
   if (period === "today") {
     return {
       start: "date_trunc('day', now())",
@@ -112,9 +142,25 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
 };
 
 export const getSalesReport = createServerFn({ method: "GET" })
-  .validator((data: { period: SalesReportPeriod }) => data)
+  .validator((data: { period: SalesReportPeriod; date?: string }) => data)
   .handler(async ({ data }): Promise<SalesReport> => {
-    const period = data.period === "week" || data.period === "month" ? data.period : "today";
+    const period =
+      data.period === "week" ||
+      data.period === "month" ||
+      data.period === "date" ||
+      data.period === "custom_month" ||
+      data.period === "custom_year"
+        ? data.period
+        : "today";
+    const selectedDate =
+      (period === "date" || period === "custom_month" || period === "custom_year") &&
+      /^\d{4}-\d{2}-\d{2}$/.test(data.date ?? "")
+        ? data.date
+        : new Date().toISOString().slice(0, 10);
+    const params =
+      period === "date" || period === "custom_month" || period === "custom_year"
+        ? [selectedDate]
+        : [];
     const range = salesPeriodSql(period);
     const { one, query } = await import("./db.server");
 
@@ -142,6 +188,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
          coalesce(avg(fr.total), 0)::numeric(12, 2) as average_receipt
        from filtered_receipts fr
        left join item_totals it on it.receipt_id = fr.id`,
+      params,
     );
 
     const chart = await query<{ label: string; income: string; receipts: number }>(
@@ -159,6 +206,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
         and r.created_at < ${range.end}
        group by b.bucket_start
        order by b.bucket_start`,
+      params,
     );
 
     const products = await query<SoldProductReport>(
@@ -177,6 +225,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
        group by coalesce(p.id::text, ri.product_id::text, ri.description), p.article_number, p.name, ri.description
        order by quantity_sold desc, total_sales desc
        limit 6`,
+      params,
     );
 
     const receipts = await query<SalesReport["receipts"][number]>(
@@ -194,6 +243,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
        group by r.id
        order by r.created_at desc
        limit 5`,
+      params,
     );
 
     return {

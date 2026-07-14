@@ -538,7 +538,7 @@ function ProductsList() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr className="text-left">
-                <th className="px-2 py-3 w-7">
+                <th className="py-3 pl-4 pr-2 sm:pl-5 w-9">
                   <Checkbox
                     className="size-3 [&_svg]:size-3"
                     checked={selected.size > 0 && selected.size === filtered.length}
@@ -553,7 +553,7 @@ function ProductsList() {
                 <th className="p-3 font-medium text-right">Retail Price</th>
                 <th className="p-3 font-medium text-right">Stock</th>
                 <th className="p-3 font-medium">Status</th>
-                <th className="p-3 w-24"></th>
+                <th className="py-3 pl-3 pr-4 sm:pr-5 w-24"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -581,7 +581,7 @@ function ProductsList() {
                 const variant = p.quantity === 0 ? "destructive" : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
-                    <td className="px-2 py-3">
+                    <td className="py-3 pl-4 pr-2 sm:pl-5">
                       <Checkbox
                         className="size-3 [&_svg]:size-3"
                         checked={selected.has(p.id)}
@@ -609,7 +609,7 @@ function ProductsList() {
                     <td className="p-3">
                       <StatusBadge variant={variant}>{status}</StatusBadge>
                     </td>
-                    <td className="p-3">
+                    <td className="py-3 pl-3 pr-4 sm:pr-5">
                       <div className="flex justify-end gap-1">
                         <Button
                           size="icon"
