@@ -223,9 +223,6 @@ function ProductsList() {
   const [brandFilter, setBrandFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(
-    null,
-  );
   const [confirmUndoImport, setConfirmUndoImport] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
@@ -358,26 +355,6 @@ function ProductsList() {
     onSuccess: () => {
       toast.success(`${selected.size} product(s) deleted`);
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["archive"] });
-      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const singleDelete = useMutation({
-    mutationFn: async (id: string) => {
-      await deleteProducts({ data: { ids: [id] } });
-    },
-    onSuccess: () => {
-      toast.success("Product removed");
-      setProductToDelete(null);
-      setSelected((current) => {
-        const next = new Set(current);
-        if (productToDelete) next.delete(productToDelete.id);
-        return next;
-      });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["archive"] });
       qc.invalidateQueries({ queryKey: ["sold-products-report"] });
@@ -561,7 +538,7 @@ function ProductsList() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr className="text-left">
-                <th className="px-2 py-3 w-7">
+                <th className="py-3 pl-4 pr-2 sm:pl-5 w-9">
                   <Checkbox
                     className="size-3 [&_svg]:size-3"
                     checked={selected.size > 0 && selected.size === filtered.length}
@@ -576,7 +553,7 @@ function ProductsList() {
                 <th className="p-3 font-medium text-right">Retail Price</th>
                 <th className="p-3 font-medium text-right">Stock</th>
                 <th className="p-3 font-medium">Status</th>
-                <th className="p-3 w-24"></th>
+                <th className="py-3 pl-3 pr-4 sm:pr-5 w-24"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -604,7 +581,7 @@ function ProductsList() {
                 const variant = p.quantity === 0 ? "destructive" : "default";
                 return (
                   <tr key={p.id} className="hover:bg-muted/30">
-                    <td className="px-2 py-3">
+                    <td className="py-3 pl-4 pr-2 sm:pl-5">
                       <Checkbox
                         className="size-3 [&_svg]:size-3"
                         checked={selected.has(p.id)}
@@ -632,7 +609,7 @@ function ProductsList() {
                     <td className="p-3">
                       <StatusBadge variant={variant}>{status}</StatusBadge>
                     </td>
-                    <td className="p-3">
+                    <td className="py-3 pl-3 pr-4 sm:pr-5">
                       <div className="flex justify-end gap-1">
                         <Button
                           size="icon"
@@ -640,14 +617,6 @@ function ProductsList() {
                           onClick={() => navigate({ to: "/products/$id", params: { id: p.id } })}
                         >
                           <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="hover:text-destructive"
-                          onClick={() => setProductToDelete({ id: p.id, name: p.name })}
-                        >
-                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </td>
@@ -668,28 +637,6 @@ function ProductsList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => bulkDelete.mutate()}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={Boolean(productToDelete)} onOpenChange={() => setProductToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this product?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {productToDelete?.name ? `"${productToDelete.name}" will be removed. ` : ""}
-              This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={singleDelete.isPending}
-              onClick={() => {
-                if (productToDelete) singleDelete.mutate(productToDelete.id);
-              }}
-            >
-              Remove
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

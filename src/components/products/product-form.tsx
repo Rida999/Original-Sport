@@ -117,6 +117,42 @@ const sanitizeSize = (value: string) => {
   const decimal = decimalParts.join("").slice(0, 1);
   return cleaned.includes(".") ? `${wholePart}.${decimal}` : wholePart;
 };
+const sportsBrands = [
+  "Adidas",
+  "Nike",
+  "Puma",
+  "Under Armour",
+  "New Balance",
+  "Reebok",
+  "Asics",
+  "Skechers",
+  "Speedo",
+  "Converse",
+  "Vans",
+  "Jordan",
+  "Fila",
+  "Mizuno",
+  "Salomon",
+  "Hoka",
+  "Havaianas",
+  "On",
+  "Brooks",
+  "Saucony",
+  "Lacoste",
+  "Champion",
+  "Umbro",
+  "Kappa",
+  "Diadora",
+  "Wilson",
+  "Head",
+  "Yonex",
+  "Babolat",
+  "Li Ning",
+  "Anta",
+  "The North Face",
+  "Columbia",
+  "Timberland",
+];
 const sanitizedInput =
   (sanitize: (value: string) => string) =>
   (event: FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -261,11 +297,17 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Brand">
               <Input
+                list="sports-brand-options"
                 maxLength={30}
                 onInput={sanitizedInput(sanitizeText)}
                 {...register("sub_brand")}
-                placeholder="Adidas Nike Puma"
+                placeholder="Choose or type a brand"
               />
+              <datalist id="sports-brand-options">
+                {sportsBrands.map((brand) => (
+                  <option key={brand} value={brand} />
+                ))}
+              </datalist>
             </Field>
             <Field label="Gender">
               <Select
