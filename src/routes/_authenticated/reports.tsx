@@ -63,6 +63,15 @@ function Reports() {
   const [selectedYear, setSelectedYear] = useState(String(currentYear));
   const [pickerMode, setPickerMode] = useState<ReportPickerMode>("day");
   const [dateDialogOpen, setDateDialogOpen] = useState(false);
+  const currentDateValue = localDateInputValue();
+  const currentMonthValue = monthInputValue();
+  const isCurrentDayReport = period === "date" && selectedDate === currentDateValue;
+  const isCurrentMonthReport = period === "custom_month" && selectedMonth === currentMonthValue;
+  const isCurrentYearReport = period === "custom_year" && selectedYear === String(currentYear);
+  const isPreviousReportActive =
+    (period === "date" && !isCurrentDayReport) ||
+    (period === "custom_month" && !isCurrentMonthReport) ||
+    (period === "custom_year" && !isCurrentYearReport);
   const reportDate =
     period === "custom_month"
       ? `${selectedMonth}-01`
@@ -116,7 +125,11 @@ function Reports() {
             year: "numeric",
           })}`
         : period === "custom_year"
-          ? `Year: ${selectedYear}`
+          ? selectedYear === String(currentYear)
+            ? "this year"
+            : `Year: ${selectedYear}`
+          : period === "year"
+            ? "this year"
           : periodOptions.find((option) => option.value === period)?.label;
   const selectedDateLabel = dateFromInputValue(selectedDate).toLocaleDateString(undefined, {
     weekday: "long",
@@ -139,9 +152,13 @@ function Reports() {
         : selectedYear;
 
   const viewSelectedReport = () => {
-    setPeriod(
-      pickerMode === "day" ? "date" : pickerMode === "month" ? "custom_month" : "custom_year",
-    );
+    if (pickerMode === "day") {
+      setPeriod(selectedDate === currentDateValue ? "today" : "date");
+    } else if (pickerMode === "month") {
+      setPeriod(selectedMonth === currentMonthValue ? "month" : "custom_month");
+    } else {
+      setPeriod(selectedYear === String(currentYear) ? "year" : "custom_year");
+    }
     setDateDialogOpen(false);
   };
 
@@ -173,7 +190,14 @@ function Reports() {
               key={option.value}
               type="button"
               size="sm"
-              variant={period === option.value ? "default" : "outline"}
+              variant={
+                period === option.value ||
+                (option.value === "today" && isCurrentDayReport) ||
+                (option.value === "month" && isCurrentMonthReport) ||
+                (option.value === "year" && isCurrentYearReport)
+                  ? "default"
+                  : "outline"
+              }
               onClick={() => setPeriod(option.value)}
             >
               {option.label}
@@ -182,11 +206,7 @@ function Reports() {
           <Button
             type="button"
             size="sm"
-            variant={
-              period === "date" || period === "custom_month" || period === "custom_year"
-                ? "default"
-                : "outline"
-            }
+            variant={isPreviousReportActive ? "default" : "outline"}
             onClick={() => setDateDialogOpen(true)}
           >
             <CalendarDays className="size-4 mr-1.5" />

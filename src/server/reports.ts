@@ -12,7 +12,14 @@ export type SoldProductReport = {
   last_sold_at: string;
 };
 
-export type SalesReportPeriod = "today" | "week" | "month" | "date" | "custom_month" | "custom_year";
+export type SalesReportPeriod =
+  | "today"
+  | "week"
+  | "month"
+  | "year"
+  | "date"
+  | "custom_month"
+  | "custom_year";
 
 export type SalesReport = {
   period: SalesReportPeriod;
@@ -132,6 +139,16 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
     };
   }
 
+  if (period === "year") {
+    return {
+      start: "date_trunc('year', now())",
+      end: "date_trunc('year', now()) + interval '1 year'",
+      step: "interval '1 month'",
+      bucket: "month",
+      label: "Mon",
+    };
+  }
+
   return {
     start: "date_trunc('month', now())",
     end: "date_trunc('month', now()) + interval '1 month'",
@@ -147,6 +164,7 @@ export const getSalesReport = createServerFn({ method: "GET" })
     const period =
       data.period === "week" ||
       data.period === "month" ||
+      data.period === "year" ||
       data.period === "date" ||
       data.period === "custom_month" ||
       data.period === "custom_year"
