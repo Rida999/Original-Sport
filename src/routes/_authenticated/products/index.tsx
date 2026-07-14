@@ -223,9 +223,6 @@ function ProductsList() {
   const [brandFilter, setBrandFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(
-    null,
-  );
   const [confirmUndoImport, setConfirmUndoImport] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
@@ -358,26 +355,6 @@ function ProductsList() {
     onSuccess: () => {
       toast.success(`${selected.size} product(s) deleted`);
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["archive"] });
-      qc.invalidateQueries({ queryKey: ["sold-products-report"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const singleDelete = useMutation({
-    mutationFn: async (id: string) => {
-      await deleteProducts({ data: { ids: [id] } });
-    },
-    onSuccess: () => {
-      toast.success("Product removed");
-      setProductToDelete(null);
-      setSelected((current) => {
-        const next = new Set(current);
-        if (productToDelete) next.delete(productToDelete.id);
-        return next;
-      });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["archive"] });
       qc.invalidateQueries({ queryKey: ["sold-products-report"] });
@@ -641,14 +618,6 @@ function ProductsList() {
                         >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="hover:text-destructive"
-                          onClick={() => setProductToDelete({ id: p.id, name: p.name })}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -668,28 +637,6 @@ function ProductsList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => bulkDelete.mutate()}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={Boolean(productToDelete)} onOpenChange={() => setProductToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this product?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {productToDelete?.name ? `"${productToDelete.name}" will be removed. ` : ""}
-              This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={singleDelete.isPending}
-              onClick={() => {
-                if (productToDelete) singleDelete.mutate(productToDelete.id);
-              }}
-            >
-              Remove
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
