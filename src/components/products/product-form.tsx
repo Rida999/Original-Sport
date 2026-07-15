@@ -20,25 +20,24 @@ import {
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
 
-const cleanTextPattern = /^[A-Za-z0-9 ]*$/;
 const optionalCleanText = (max: number) =>
   z
     .string()
     .max(max)
-    .regex(cleanTextPattern, "Special characters are not allowed")
     .optional()
     .or(z.literal(""));
 const priceField = z.preprocess(
-  (value) => String(value ?? ""),
+  (value) => String(value ?? "").trim(),
   z
     .string()
-    .regex(/^\d{1,4}(\.\d{1,2})?$/, "Price must be at most 4 digits and 2 decimals")
+    .min(1, "Selling price is required")
+    .regex(/^\d+(\.\d{1,2})?$/, "Price must have at most 2 decimals")
     .transform(Number),
 );
 const optionalPriceField = z.preprocess((value) => {
   const text = String(value ?? "").trim();
   return text === "" ? 0 : text;
-}, z.coerce.number().min(0));
+}, z.coerce.number().min(0, "Price cannot be negative"));
 const quantityField = z.preprocess(
   (value) => String(value ?? ""),
   z
@@ -55,9 +54,8 @@ const schema = z.object({
     .max(20, "Article number must be at most 20 characters"),
   name: z
     .string()
-    .min(2, "Required")
-    .max(30, "Product name must be at most 30 characters")
-    .regex(/^[A-Za-z0-9 ]+$/, "Product name cannot contain special characters"),
+    .min(1, "Required")
+    .max(200, "Product name must be at most 200 characters"),
   model_name: optionalCleanText(200),
   category_id: z.string().uuid().nullable().optional(),
   key_category: optionalCleanText(200),
@@ -65,21 +63,17 @@ const schema = z.object({
   gender: z.enum(["men", "women", "unisex", "kids"]).nullable().optional(),
   sport: optionalCleanText(100),
   marketing_line: optionalCleanText(200),
-  product_division: optionalCleanText(30),
-  product_line: optionalCleanText(30),
-  product_type: optionalCleanText(30),
-  sub_brand: optionalCleanText(30),
-  color: optionalCleanText(20),
-  size: z
-    .string()
-    .regex(/^\d{1,2}(\.\d)?$/, "Size must be like 9, 42, or 42.5")
-    .optional()
-    .or(z.literal("")),
+  product_division: optionalCleanText(200),
+  product_line: optionalCleanText(200),
+  product_type: optionalCleanText(200),
+  sub_brand: optionalCleanText(200),
+  color: optionalCleanText(100),
+  size: z.string().max(40, "Size must be at most 40 characters").optional().or(z.literal("")),
   purchase_price: optionalPriceField,
   selling_price: priceField,
   quantity: quantityField,
   min_stock: z.coerce.number().int().min(0),
-  description: optionalCleanText(200),
+  description: optionalCleanText(1000),
 });
 
 type Values = z.infer<typeof schema>;
@@ -100,23 +94,14 @@ const readImage = (file: File) =>
   });
 
 const sanitizeArticleNumber = (value: string) => value.replace(/[^A-Za-z0-9 ]/g, "");
-const sanitizeText = (value: string) => value.replace(/[^A-Za-z0-9 ]/g, "");
 const sanitizeMoney = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, "");
   const [whole, ...decimalParts] = cleaned.split(".");
-  const wholePart = whole.slice(0, 4);
+  const wholePart = whole.slice(0, 10);
   const decimals = decimalParts.join("").slice(0, 2);
   return cleaned.includes(".") ? `${wholePart}.${decimals}` : wholePart;
 };
 const sanitizeInteger = (value: string) => value.replace(/\D/g, "").slice(0, 5);
-const sanitizeSize = (value: string) => {
-  const cleaned = value.replace(/[^0-9.]/g, "");
-  const [whole, ...decimalParts] = cleaned.split(".");
-  const wholePart = whole.slice(0, 2);
-  if (!wholePart) return "";
-  const decimal = decimalParts.join("").slice(0, 1);
-  return cleaned.includes(".") ? `${wholePart}.${decimal}` : wholePart;
-};
 const sportsBrands = [
   "Adidas",
   "Nike",
@@ -288,8 +273,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Label htmlFor="name">Product name</Label>
             <Input
               id="name"
-              maxLength={30}
-              onInput={sanitizedInput(sanitizeText)}
+              maxLength={200}
               {...register("name")}
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
@@ -298,8 +282,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Field label="Brand">
               <Input
                 list="sports-brand-options"
-                maxLength={30}
-                onInput={sanitizedInput(sanitizeText)}
+                maxLength={200}
                 {...register("sub_brand")}
                 placeholder="Choose or type a brand"
               />
@@ -327,37 +310,31 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             </Field>
             <Field label="Product division">
               <Input
-                maxLength={30}
-                onInput={sanitizedInput(sanitizeText)}
+                maxLength={200}
                 {...register("product_division")}
               />
             </Field>
             <Field label="Product line">
               <Input
-                maxLength={30}
-                onInput={sanitizedInput(sanitizeText)}
+                maxLength={200}
                 {...register("product_line")}
               />
             </Field>
             <Field label="Product type">
               <Input
-                maxLength={30}
-                onInput={sanitizedInput(sanitizeText)}
+                maxLength={200}
                 {...register("product_type")}
               />
             </Field>
             <Field label="Color">
               <Input
-                maxLength={20}
-                onInput={sanitizedInput(sanitizeText)}
+                maxLength={100}
                 {...register("color")}
               />
             </Field>
             <Field label="Size">
               <Input
-                inputMode="decimal"
-                maxLength={4}
-                onInput={sanitizedInput(sanitizeSize)}
+                maxLength={40}
                 {...register("size")}
                 placeholder="42.5"
               />
@@ -369,8 +346,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Textarea
               id="description"
               rows={4}
-              maxLength={200}
-              onInput={sanitizedInput(sanitizeText)}
+              maxLength={1000}
               {...register("description")}
             />
             {errors.description && (
@@ -395,7 +371,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
             <Field label="Selling price">
               <Input
                 inputMode="decimal"
-                maxLength={6}
+                maxLength={13}
                 placeholder="0.00"
                 onInput={sanitizedInput(sanitizeMoney)}
                 {...register("selling_price")}
