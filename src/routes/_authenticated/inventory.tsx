@@ -1113,17 +1113,10 @@ function Inventory() {
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Label htmlFor="total-amount" className="text-sm font-semibold">
-              Total
-            </Label>
-            <Input
-              id="total-amount"
-              className="max-w-28 text-right font-semibold"
-              inputMode="decimal"
-              type="text"
-              value={totalOverride !== "" ? totalOverride : suggestedTotal.toFixed(2)}
-              onChange={(e) => setTotalOverride(e.target.value)}
-            />
+            <span className="text-sm font-semibold">Total</span>
+            <span className="min-w-28 select-none rounded-md border bg-muted/40 px-3 py-2 text-right font-semibold tabular-nums">
+              {money(receiptTotal)}
+            </span>
           </div>
 
           <div className="space-y-2">
