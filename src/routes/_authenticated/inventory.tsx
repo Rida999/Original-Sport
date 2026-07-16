@@ -410,8 +410,10 @@ function Inventory() {
   };
 
   const resetReceipt = () => {
+    const shouldCloseSecondReceipt =
+      activeReceiptIndex === 1 || receiptDrafts[1].items.length === 0;
     setReceiptItems([]);
-    pushDraft([]);
+    pushDraft([], activeReceiptSlot);
     setCashPaid("");
     setDiscountMode("none");
     setDiscountPercent(0);
@@ -419,6 +421,10 @@ function Inventory() {
     setDiscountOverride("");
     setTotalOverride("");
     setChangeOverride("");
+    if (shouldCloseSecondReceipt) {
+      setSecondReceiptOpen(false);
+      setActiveReceiptIndex(0);
+    }
   };
 
   const invalidateStockQueries = () => {
@@ -495,17 +501,26 @@ function Inventory() {
   });
 
   const saveReceipt = useMutation({
-    mutationFn: async () =>
-      createReceipt({
+    mutationFn: async () => {
+      const items = receiptItems.filter(
+        (item) =>
+          item.description.trim().length > 0 &&
+          Number(item.quantity) > 0 &&
+          Number(item.unit_price) >= 0,
+      );
+      if (items.length === 0) throw new Error("Receipt has no items.");
+
+      return createReceipt({
         data: {
-          items: receiptItems,
+          items,
           customer_name: null,
           discount: discountAmount,
           total: receiptTotal,
           cash_paid: Number(cashPaid) || 0,
           cash_exchange: changeDue,
         },
-      }),
+      });
+    },
     onSuccess: (receipt) => {
       toast.success(`Receipt #${receipt.invoice_number} saved`);
       const printUrl = `/print/receipt/${receipt.id}`;
@@ -520,6 +535,7 @@ function Inventory() {
     },
     onError: (e: Error) => {
       printWindowRef.current?.close();
+      printWindowRef.current = null;
       toast.error(e.message);
     },
   });
@@ -544,6 +560,8 @@ function Inventory() {
 
   const removeOneReceiptItem = async (item: ReceiptLine, index: number) => {
     if (returnReceiptStock.isPending) return;
+    const shouldCloseSecondReceipt =
+      activeReceiptIndex === 1 && receiptItems.length === 1 && item.quantity <= 1;
     const result = await returnReceiptStock.mutateAsync([
       { product_id: item.product_id, quantity: 1 },
     ]);
@@ -556,6 +574,10 @@ function Inventory() {
       pushDraft(next);
       return next;
     });
+    if (shouldCloseSecondReceipt) {
+      setSecondReceiptOpen(false);
+      setActiveReceiptIndex(0);
+    }
     if (result.restored > 0) {
       toast.success("Returned 1 item to inventory");
     }
