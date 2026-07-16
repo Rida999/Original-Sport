@@ -52,9 +52,26 @@ const formatDayLabel = (value: string) => {
   const date = dateFromInputValue(value);
   return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
 };
+const startOfWeek = (date: Date) => {
+  const weekStart = new Date(date);
+  const day = weekStart.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  weekStart.setDate(weekStart.getDate() + diff);
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart;
+};
+const weekInputValue = (date = new Date()) => localDateInputValue(startOfWeek(date));
+const formatWeekLabel = (value: string) => {
+  const start = startOfWeek(dateFromInputValue(value));
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return `${formatDayLabel(localDateInputValue(start))} - ${formatDayLabel(
+    localDateInputValue(end),
+  )}`;
+};
 const monthInputValue = (date = new Date()) => localDateInputValue(date).slice(0, 7);
 const currentYear = new Date().getFullYear();
-type ReportPickerMode = "day" | "month" | "year";
+type ReportPickerMode = "day" | "week" | "month" | "year";
 const formatReportDateTime = (value: string) =>
   new Intl.DateTimeFormat("en-GB", {
     dateStyle: "short",
@@ -66,21 +83,29 @@ const formatReportDateTime = (value: string) =>
 function Reports() {
   const [period, setPeriod] = useState<SalesReportPeriod>("today");
   const [selectedDate, setSelectedDate] = useState(localDateInputValue);
+  const [selectedWeekDate, setSelectedWeekDate] = useState(localDateInputValue);
   const [selectedMonth, setSelectedMonth] = useState(monthInputValue);
   const [selectedYear, setSelectedYear] = useState(String(currentYear));
   const [pickerMode, setPickerMode] = useState<ReportPickerMode>("day");
   const [dateDialogOpen, setDateDialogOpen] = useState(false);
   const currentDateValue = localDateInputValue();
+  const currentWeekValue = weekInputValue();
   const currentMonthValue = monthInputValue();
   const isCurrentDayReport = period === "date" && selectedDate === currentDateValue;
+  const isCurrentWeekReport =
+    period === "custom_week" &&
+    weekInputValue(dateFromInputValue(selectedWeekDate)) === currentWeekValue;
   const isCurrentMonthReport = period === "custom_month" && selectedMonth === currentMonthValue;
   const isCurrentYearReport = period === "custom_year" && selectedYear === String(currentYear);
   const isPreviousReportActive =
     (period === "date" && !isCurrentDayReport) ||
+    (period === "custom_week" && !isCurrentWeekReport) ||
     (period === "custom_month" && !isCurrentMonthReport) ||
     (period === "custom_year" && !isCurrentYearReport);
   const reportDate =
-    period === "custom_month"
+    period === "custom_week"
+      ? selectedWeekDate
+      : period === "custom_month"
       ? `${selectedMonth}-01`
       : period === "custom_year"
         ? `${selectedYear}-01-01`
@@ -126,6 +151,10 @@ function Reports() {
   const activePeriodLabel =
     period === "date"
       ? `Day: ${formatDayLabel(selectedDate)}`
+      : period === "custom_week"
+        ? isCurrentWeekReport
+          ? "this week"
+          : `Week: ${formatWeekLabel(selectedWeekDate)}`
       : period === "custom_month"
         ? `Month: ${dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(undefined, {
             month: "long",
@@ -144,6 +173,7 @@ function Reports() {
     day: "numeric",
     year: "numeric",
   });
+  const selectedWeekLabel = formatWeekLabel(selectedWeekDate);
   const selectedMonthLabel = dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(
     undefined,
     {
@@ -154,6 +184,8 @@ function Reports() {
   const selectedReportLabel =
     pickerMode === "day"
       ? selectedDateLabel
+      : pickerMode === "week"
+        ? selectedWeekLabel
       : pickerMode === "month"
         ? selectedMonthLabel
         : selectedYear;
@@ -161,6 +193,12 @@ function Reports() {
   const viewSelectedReport = () => {
     if (pickerMode === "day") {
       setPeriod(selectedDate === currentDateValue ? "today" : "date");
+    } else if (pickerMode === "week") {
+      setPeriod(
+        weekInputValue(dateFromInputValue(selectedWeekDate)) === currentWeekValue
+          ? "week"
+          : "custom_week",
+      );
     } else if (pickerMode === "month") {
       setPeriod(selectedMonth === currentMonthValue ? "month" : "custom_month");
     } else {
@@ -174,6 +212,11 @@ function Reports() {
     if (pickerMode === "day") {
       date.setDate(date.getDate() - 1);
       setSelectedDate(localDateInputValue(date));
+      return;
+    }
+    if (pickerMode === "week") {
+      date.setDate(date.getDate() - 7);
+      setSelectedWeekDate(localDateInputValue(date));
       return;
     }
     if (pickerMode === "month") {
@@ -200,6 +243,7 @@ function Reports() {
               variant={
                 period === option.value ||
                 (option.value === "today" && isCurrentDayReport) ||
+                (option.value === "week" && isCurrentWeekReport) ||
                 (option.value === "month" && isCurrentMonthReport) ||
                 (option.value === "year" && isCurrentYearReport)
                   ? "default"
@@ -236,15 +280,15 @@ function Reports() {
                 <div>
                   <DialogTitle>Select previous report date</DialogTitle>
                   <DialogDescription>
-                    Pick a day, month, or year to review its sales, receipts, and sold products.
+                    Pick a day, week, month, or year to review its sales, receipts, and sold products.
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
           </div>
           <div className="p-4 sm:p-5">
-            <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg bg-muted p-1">
-              {(["day", "month", "year"] as const).map((mode) => (
+            <div className="mb-3 grid grid-cols-4 gap-2 rounded-lg bg-muted p-1">
+              {(["day", "week", "month", "year"] as const).map((mode) => (
                 <Button
                   key={mode}
                   type="button"
@@ -252,7 +296,13 @@ function Reports() {
                   variant={pickerMode === mode ? "default" : "ghost"}
                   onClick={() => setPickerMode(mode)}
                 >
-                  {mode === "day" ? "Day" : mode === "month" ? "Month" : "Year"}
+                  {mode === "day"
+                    ? "Day"
+                    : mode === "week"
+                      ? "Week"
+                      : mode === "month"
+                        ? "Month"
+                        : "Year"}
                 </Button>
               ))}
             </div>
@@ -269,6 +319,24 @@ function Reports() {
                     setSelectedDate(localDateInputValue(date));
                   }}
                 />
+              ) : pickerMode === "week" ? (
+                <div className="w-full max-w-xs space-y-3">
+                  <div>
+                    <div className="text-sm font-medium">Select week</div>
+                    <p className="text-xs text-muted-foreground">
+                      Choose any date inside the week you want.
+                    </p>
+                  </div>
+                  <Input
+                    type="date"
+                    value={selectedWeekDate}
+                    max={localDateInputValue()}
+                    onChange={(event) => setSelectedWeekDate(event.target.value)}
+                  />
+                  <div className="rounded-md bg-muted/50 px-3 py-2 text-sm font-medium">
+                    {selectedWeekLabel}
+                  </div>
+                </div>
               ) : pickerMode === "month" ? (
                 <div className="w-full max-w-xs space-y-3">
                   <div>
