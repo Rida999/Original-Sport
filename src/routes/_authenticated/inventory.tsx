@@ -151,6 +151,16 @@ const emptyReceiptDraft = (): ReceiptDraft => ({
   changeOverride: "",
 });
 
+const isReceiptDraftEmpty = (draft: ReceiptDraft) =>
+  draft.items.length === 0 &&
+  draft.cashPaid.trim().length === 0 &&
+  draft.discountMode === "none" &&
+  draft.discountPercent === 0 &&
+  draft.customDiscountPercent.trim().length === 0 &&
+  draft.discountOverride.trim().length === 0 &&
+  draft.totalOverride.trim().length === 0 &&
+  draft.changeOverride.trim().length === 0;
+
 const normalizeReceiptDraft = (draft: Partial<ReceiptDraft> | null | undefined): ReceiptDraft => {
   const items = Array.isArray(draft?.items)
     ? draft.items.filter(
@@ -272,6 +282,7 @@ function Inventory() {
   const totalOverride = activeReceipt.totalOverride;
   const changeOverride = activeReceipt.changeOverride;
   const hasAnyReceiptItems = receiptDrafts.some((draft) => draft.items.length > 0);
+  const showReceiptPanel = hasAnyReceiptItems || secondReceiptOpen;
   const showReceiptSelector = secondReceiptOpen || receiptDrafts[1].items.length > 0;
   const qc = useQueryClient();
   const updateActiveReceipt = (updater: (draft: ReceiptDraft) => ReceiptDraft) => {
@@ -409,21 +420,23 @@ function Inventory() {
     setDiscountOverride(suggestion > 0 ? suggestion.toFixed(2) : "");
   };
 
-  const resetReceipt = () => {
-    const shouldCloseSecondReceipt =
-      activeReceiptIndex === 1 || receiptDrafts[1].items.length === 0;
-    setReceiptItems([]);
-    pushDraft([], activeReceiptSlot);
-    setCashPaid("");
-    setDiscountMode("none");
-    setDiscountPercent(0);
-    setCustomDiscountPercent("");
-    setDiscountOverride("");
-    setTotalOverride("");
-    setChangeOverride("");
-    if (shouldCloseSecondReceipt) {
+  const resetReceipt = (receiptIndex = activeReceiptIndex, options?: { closeSecond?: boolean }) => {
+    const slot = receiptDraftSlots[receiptIndex];
+    setReceiptDrafts((current) => {
+      const next = [...current] as [ReceiptDraft, ReceiptDraft];
+      next[receiptIndex] = emptyReceiptDraft();
+      return next;
+    });
+    pushDraft([], slot);
+
+    if (receiptIndex === 1) {
       setSecondReceiptOpen(false);
       setActiveReceiptIndex(0);
+      return;
+    }
+
+    if (options?.closeSecond && isReceiptDraftEmpty(receiptDrafts[1])) {
+      setSecondReceiptOpen(false);
     }
   };
 
@@ -529,7 +542,7 @@ function Inventory() {
       } else {
         window.open(printUrl, "_blank");
       }
-      resetReceipt();
+      resetReceipt(activeReceiptIndex, { closeSecond: true });
       invalidateStockQueries();
       qc.invalidateQueries({ queryKey: ["recent-receipts"] });
     },
@@ -543,7 +556,7 @@ function Inventory() {
   const clearReceipt = async () => {
     if (receiptItems.length === 0 || returnReceiptStock.isPending) return;
     const result = await returnReceiptStock.mutateAsync(receiptItems);
-    resetReceipt();
+    resetReceipt(activeReceiptIndex);
     if (result.restored > 0) {
       toast.success(`Returned ${result.restored} item(s) to inventory`);
     }
@@ -575,8 +588,7 @@ function Inventory() {
       return next;
     });
     if (shouldCloseSecondReceipt) {
-      setSecondReceiptOpen(false);
-      setActiveReceiptIndex(0);
+      resetReceipt(1);
     }
     if (result.restored > 0) {
       toast.success("Returned 1 item to inventory");
@@ -924,7 +936,7 @@ function Inventory() {
         )}
       </Card>
 
-      {hasAnyReceiptItems && (
+      {showReceiptPanel && (
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
