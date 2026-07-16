@@ -2,9 +2,9 @@ import { useState, useRef, type FormEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { saveProduct } from "@/server/products";
+import { listProductBrands, saveProduct } from "@/server/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,42 +102,6 @@ const sanitizeMoney = (value: string) => {
   return cleaned.includes(".") ? `${wholePart}.${decimals}` : wholePart;
 };
 const sanitizeInteger = (value: string) => value.replace(/\D/g, "").slice(0, 5);
-const sportsBrands = [
-  "Adidas",
-  "Nike",
-  "Puma",
-  "Under Armour",
-  "New Balance",
-  "Reebok",
-  "Asics",
-  "Skechers",
-  "Speedo",
-  "Converse",
-  "Vans",
-  "Jordan",
-  "Fila",
-  "Mizuno",
-  "Salomon",
-  "Hoka",
-  "Havaianas",
-  "On",
-  "Brooks",
-  "Saucony",
-  "Lacoste",
-  "Champion",
-  "Umbro",
-  "Kappa",
-  "Diadora",
-  "Wilson",
-  "Head",
-  "Yonex",
-  "Babolat",
-  "Li Ning",
-  "Anta",
-  "The North Face",
-  "Columbia",
-  "Timberland",
-];
 const sanitizedInput =
   (sanitize: (value: string) => string) =>
   (event: FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -148,12 +112,22 @@ const priceDefault = (value: unknown) => {
   return price > 0 ? price : ("" as unknown as number);
 };
 
+const uniqueBrands = (brands: string[]) =>
+  Array.from(new Map(brands.map((brand) => [brand.toLowerCase(), brand.trim()] as const)).values())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
 export function ProductForm({ initial }: { initial?: ProductDefault }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { data: existingBrands } = useQuery({
+    queryKey: ["product-brands"],
+    queryFn: async () => listProductBrands(),
+  });
+  const brandOptions = uniqueBrands(existingBrands ?? []);
 
   const {
     register,
@@ -287,7 +261,7 @@ export function ProductForm({ initial }: { initial?: ProductDefault }) {
                 placeholder="Choose or type a brand"
               />
               <datalist id="sports-brand-options">
-                {sportsBrands.map((brand) => (
+                {brandOptions.map((brand) => (
                   <option key={brand} value={brand} />
                 ))}
               </datalist>

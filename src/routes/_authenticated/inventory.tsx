@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import {
   Camera,
+  Minus,
+  Plus,
   Printer,
   RotateCcw,
   ScanLine,
@@ -46,6 +48,7 @@ import { money } from "@/lib/format";
 
 type ReceiptLine = {
   product_id: string | null;
+  article_number?: string;
   description: string;
   quantity: number;
   unit_price: number;
@@ -364,6 +367,7 @@ function Inventory() {
                     ...prev,
                     {
                       product_id: product.id,
+                      article_number: product.article_number,
                       description: product.name,
                       quantity: 1,
                       unit_price: Number(product.selling_price),
@@ -457,6 +461,22 @@ function Inventory() {
     if (result.restored > 0) {
       toast.success("Returned 1 item to inventory");
     }
+  };
+
+  const addOneReceiptItem = (item: ReceiptLine) => {
+    if (adjustStock.isPending) return;
+    const articleNumber =
+      item.article_number ??
+      (item.product_id
+        ? data?.find((product) => product.id === item.product_id)?.article_number
+        : undefined);
+
+    if (!articleNumber) {
+      toast.error("Could not find this product in inventory.");
+      return;
+    }
+
+    adjustStock.mutate({ article_number: articleNumber, mode: "remove" });
   };
 
   useEffect(() => {
@@ -828,31 +848,46 @@ function Inventory() {
                   <th className="py-1 pr-2 font-medium">Description</th>
                   <th className="py-1 pr-2 text-right font-medium">Price</th>
                   <th className="py-1 pr-2 text-right font-medium">Total</th>
-                  <th className="py-1 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {receiptItems.map((item, index) => (
                   <tr key={item.product_id ?? item.description}>
-                    <td className="py-1.5 pr-2 tabular-nums">{item.quantity}</td>
+                    <td className="py-1.5 pr-2">
+                      <div className="inline-flex items-center overflow-hidden rounded-md border bg-background">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-none"
+                          disabled={returnReceiptStock.isPending}
+                          onClick={() => void removeOneReceiptItem(item, index)}
+                          aria-label={`Decrease ${item.description} quantity`}
+                        >
+                          <Minus className="size-4" />
+                        </Button>
+                        <span className="min-w-8 px-2 text-center text-sm font-medium tabular-nums">
+                          {item.quantity}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-none"
+                          disabled={adjustStock.isPending}
+                          onClick={() => addOneReceiptItem(item)}
+                          aria-label={`Increase ${item.description} quantity`}
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                      </div>
+                    </td>
                     <td className="py-1.5 pr-2">{item.description}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">
                       {money(item.unit_price)}
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">
                       {money(item.quantity * item.unit_price)}
-                    </td>
-                    <td className="py-1.5 text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={returnReceiptStock.isPending}
-                        onClick={() => void removeOneReceiptItem(item, index)}
-                      >
-                        <RotateCcw className="size-4 mr-1.5" />
-                        Remove 1
-                      </Button>
                     </td>
                   </tr>
                 ))}
