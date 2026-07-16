@@ -8,8 +8,8 @@ import {
 } from "@/server/inventory";
 import {
   createReceipt,
-  getDraftReceipt,
-  saveDraftReceipt,
+  getReceiptDraftSlot,
+  saveReceiptDraftSlot,
 } from "@/server/receipts";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
   type TouchEvent,
   type TouchList as ReactTouchList,
 } from "react";
@@ -132,6 +133,46 @@ const textCodeFromOcr = (text: string) => {
 
 const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
+const RECEIPT_DRAFTS_KEY = "original-sport-receipt-drafts-v2";
+const receiptDraftSlots = ["receipt-a", "receipt-b"] as const;
+
+const emptyReceiptDraft = (): ReceiptDraft => ({
+  items: [],
+  cashPaid: "",
+  discountMode: "none",
+  discountPercent: 0,
+  customDiscountPercent: "",
+  discountOverride: "",
+  totalOverride: "",
+  changeOverride: "",
+});
+
+const normalizeReceiptDraft = (draft: Partial<ReceiptDraft> | null | undefined): ReceiptDraft => {
+  const items = Array.isArray(draft?.items)
+    ? draft.items.filter(
+        (item): item is ReceiptLine =>
+          typeof item.description === "string" &&
+          typeof item.quantity === "number" &&
+          typeof item.unit_price === "number",
+      )
+    : [];
+  const discountMode =
+    draft?.discountMode === "preset" || draft?.discountMode === "custom"
+      ? draft.discountMode
+      : "none";
+
+  return {
+    items,
+    cashPaid: typeof draft?.cashPaid === "string" ? draft.cashPaid : "",
+    discountMode,
+    discountPercent: Number(draft?.discountPercent) || 0,
+    customDiscountPercent:
+      typeof draft?.customDiscountPercent === "string" ? draft.customDiscountPercent : "",
+    discountOverride: typeof draft?.discountOverride === "string" ? draft.discountOverride : "",
+    totalOverride: typeof draft?.totalOverride === "string" ? draft.totalOverride : "",
+    changeOverride: typeof draft?.changeOverride === "string" ? draft.changeOverride : "",
+  };
+};
 
 const readReceiptDraft = (): ReceiptDraft | null => {
   if (typeof window === "undefined") return null;
@@ -171,6 +212,25 @@ const readReceiptDraft = (): ReceiptDraft | null => {
   }
 };
 
+const readReceiptDrafts = (): [ReceiptDraft, ReceiptDraft] => {
+  if (typeof window === "undefined") return [emptyReceiptDraft(), emptyReceiptDraft()];
+
+  try {
+    const raw = window.localStorage.getItem(RECEIPT_DRAFTS_KEY);
+    if (raw) {
+      const drafts = JSON.parse(raw) as Partial<ReceiptDraft>[];
+      return [
+        normalizeReceiptDraft(drafts?.[0]),
+        normalizeReceiptDraft(drafts?.[1]),
+      ];
+    }
+  } catch {
+    // Fall through to the single-receipt migration below.
+  }
+
+  return [readReceiptDraft() ?? emptyReceiptDraft(), emptyReceiptDraft()];
+};
+
 function Inventory() {
   const [q, setQ] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
@@ -189,34 +249,59 @@ function Inventory() {
   const pinchDistanceRef = useRef(0);
   const adjustStockRef = useRef<StockAdjustment | null>(null);
   const printWindowRef = useRef<Window | null>(null);
-  const lastPushedDraftRef = useRef("");
-  const [receiptItems, setReceiptItems] = useState<ReceiptLine[]>(
-    () => readReceiptDraft()?.items ?? [],
+  const lastPushedDraftRef = useRef<Record<string, string>>({});
+  const [activeReceiptIndex, setActiveReceiptIndex] = useState<0 | 1>(0);
+  const [receiptDrafts, setReceiptDrafts] = useState<[ReceiptDraft, ReceiptDraft]>(
+    () => readReceiptDrafts(),
   );
-  const [cashPaid, setCashPaid] = useState(() => readReceiptDraft()?.cashPaid ?? "");
-  const [discountMode, setDiscountMode] = useState<"none" | "preset" | "custom">(
-    () => readReceiptDraft()?.discountMode ?? "none",
+  const [secondReceiptOpen, setSecondReceiptOpen] = useState(
+    () => readReceiptDrafts()[1].items.length > 0,
   );
-  const [discountPercent, setDiscountPercent] = useState(
-    () => readReceiptDraft()?.discountPercent ?? 0,
-  );
-  const [customDiscountPercent, setCustomDiscountPercent] = useState(
-    () => readReceiptDraft()?.customDiscountPercent ?? "",
-  );
-  // The percent buttons just fill this in as a suggestion - typing directly
-  // in the discount amount field (e.g. to round it) overrides that.
-  const [discountOverride, setDiscountOverride] = useState(
-    () => readReceiptDraft()?.discountOverride ?? "",
-  );
-  // Total/Change display the live-computed value until the field is edited
-  // directly (e.g. to round it), at which point the typed value takes over.
-  const [totalOverride, setTotalOverride] = useState(
-    () => readReceiptDraft()?.totalOverride ?? "",
-  );
-  const [changeOverride, setChangeOverride] = useState(
-    () => readReceiptDraft()?.changeOverride ?? "",
-  );
+  const activeReceipt = receiptDrafts[activeReceiptIndex];
+  const activeReceiptSlot = receiptDraftSlots[activeReceiptIndex];
+  const receiptItems = activeReceipt.items;
+  const cashPaid = activeReceipt.cashPaid;
+  const discountMode = activeReceipt.discountMode;
+  const discountPercent = activeReceipt.discountPercent;
+  const customDiscountPercent = activeReceipt.customDiscountPercent;
+  const discountOverride = activeReceipt.discountOverride;
+  const totalOverride = activeReceipt.totalOverride;
+  const changeOverride = activeReceipt.changeOverride;
+  const hasAnyReceiptItems = receiptDrafts.some((draft) => draft.items.length > 0);
+  const showReceiptSelector = secondReceiptOpen || receiptDrafts[1].items.length > 0;
   const qc = useQueryClient();
+  const updateActiveReceipt = (updater: (draft: ReceiptDraft) => ReceiptDraft) => {
+    setReceiptDrafts((current) => {
+      const next = [...current] as [ReceiptDraft, ReceiptDraft];
+      next[activeReceiptIndex] = updater(current[activeReceiptIndex]);
+      return next;
+    });
+  };
+  const setActiveReceiptField = <K extends keyof ReceiptDraft>(
+    key: K,
+    value: SetStateAction<ReceiptDraft[K]>,
+  ) => {
+    updateActiveReceipt((draft) => ({
+      ...draft,
+      [key]: typeof value === "function" ? (value as (previous: ReceiptDraft[K]) => ReceiptDraft[K])(draft[key]) : value,
+    }));
+  };
+  const setReceiptItems = (value: SetStateAction<ReceiptLine[]>) => {
+    setActiveReceiptField("items", value);
+  };
+  const setCashPaid = (value: SetStateAction<string>) => setActiveReceiptField("cashPaid", value);
+  const setDiscountMode = (value: SetStateAction<"none" | "preset" | "custom">) =>
+    setActiveReceiptField("discountMode", value);
+  const setDiscountPercent = (value: SetStateAction<number>) =>
+    setActiveReceiptField("discountPercent", value);
+  const setCustomDiscountPercent = (value: SetStateAction<string>) =>
+    setActiveReceiptField("customDiscountPercent", value);
+  const setDiscountOverride = (value: SetStateAction<string>) =>
+    setActiveReceiptField("discountOverride", value);
+  const setTotalOverride = (value: SetStateAction<string>) =>
+    setActiveReceiptField("totalOverride", value);
+  const setChangeOverride = (value: SetStateAction<string>) =>
+    setActiveReceiptField("changeOverride", value);
   const { data } = useQuery({
     queryKey: ["inventory"],
     queryFn: async () => listInventory(),
@@ -224,12 +309,13 @@ function Inventory() {
   // Shared with any other device (e.g. a monitor) looking at this same page -
   // whichever device scans pushes here, everyone else picks it up on poll.
   const { data: draftReceipt } = useQuery({
-    queryKey: ["draft-receipt"],
-    queryFn: async () => getDraftReceipt(),
+    queryKey: ["draft-receipt", activeReceiptSlot],
+    queryFn: async () => getReceiptDraftSlot({ data: { slot: activeReceiptSlot } }),
     refetchInterval: 1500,
   });
   const syncDraft = useMutation({
-    mutationFn: async (items: ReceiptLine[]) => saveDraftReceipt({ data: { items } }),
+    mutationFn: async ({ slot, items }: { slot: string; items: ReceiptLine[] }) =>
+      saveReceiptDraftSlot({ data: { slot, items } }),
   });
   const toggleQuickSale = useMutation({
     mutationFn: async ({ id, quick_sale }: { id: string; quick_sale: boolean }) =>
@@ -239,9 +325,9 @@ function Inventory() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-  const pushDraft = (items: ReceiptLine[]) => {
-    lastPushedDraftRef.current = JSON.stringify(items);
-    syncDraft.mutate(items);
+  const pushDraft = (items: ReceiptLine[], slot = activeReceiptSlot) => {
+    lastPushedDraftRef.current[slot] = JSON.stringify(items);
+    syncDraft.mutate({ slot, items });
   };
   const brandOptions = useMemo(() => {
     const brands = new Set<string>();
@@ -440,6 +526,15 @@ function Inventory() {
     }
   };
 
+  const openNewReceipt = () => {
+    if (secondReceiptOpen || receiptDrafts[1].items.length > 0) {
+      toast.info("Both receipts are already open");
+      return;
+    }
+    setSecondReceiptOpen(true);
+    setActiveReceiptIndex(1);
+  };
+
   const removeOneReceiptItem = async (item: ReceiptLine, index: number) => {
     if (returnReceiptStock.isPending) return;
     const result = await returnReceiptStock.mutateAsync([
@@ -462,55 +557,37 @@ function Inventory() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const hasDraft =
-      receiptItems.length > 0 ||
-      cashPaid.trim().length > 0 ||
-      discountMode !== "none" ||
-      discountPercent > 0 ||
-      customDiscountPercent.trim().length > 0 ||
-      discountOverride.trim().length > 0 ||
-      totalOverride.trim().length > 0 ||
-      changeOverride.trim().length > 0;
+    const hasDraft = receiptDrafts.some(
+      (draft) =>
+        draft.items.length > 0 ||
+        draft.cashPaid.trim().length > 0 ||
+        draft.discountMode !== "none" ||
+        draft.discountPercent > 0 ||
+        draft.customDiscountPercent.trim().length > 0 ||
+        draft.discountOverride.trim().length > 0 ||
+        draft.totalOverride.trim().length > 0 ||
+        draft.changeOverride.trim().length > 0,
+    );
 
     if (!hasDraft) {
+      window.localStorage.removeItem(RECEIPT_DRAFTS_KEY);
       window.localStorage.removeItem(RECEIPT_DRAFT_KEY);
       return;
     }
 
-    window.localStorage.setItem(
-      RECEIPT_DRAFT_KEY,
-      JSON.stringify({
-        items: receiptItems,
-        cashPaid,
-        discountMode,
-        discountPercent,
-        customDiscountPercent,
-        discountOverride,
-        totalOverride,
-        changeOverride,
-      } satisfies ReceiptDraft),
-    );
-  }, [
-    cashPaid,
-    changeOverride,
-    customDiscountPercent,
-    discountMode,
-    discountOverride,
-    discountPercent,
-    receiptItems,
-    totalOverride,
-  ]);
+    window.localStorage.setItem(RECEIPT_DRAFTS_KEY, JSON.stringify(receiptDrafts));
+  }, [receiptDrafts]);
 
   useEffect(() => {
     if (!draftReceipt) return;
     const fetched = JSON.stringify(draftReceipt.items);
     // Skip if this is just the poll echoing back what we ourselves last
     // pushed - only adopt it when some other device changed the shared draft.
-    if (fetched === lastPushedDraftRef.current) return;
+    if (fetched === lastPushedDraftRef.current[activeReceiptSlot]) return;
     if (fetched === JSON.stringify(receiptItems)) return;
-    lastPushedDraftRef.current = fetched;
+    lastPushedDraftRef.current[activeReceiptSlot] = fetched;
     setReceiptItems(draftReceipt.items);
-  }, [draftReceipt]);
+  }, [activeReceiptSlot, draftReceipt, receiptItems]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -802,24 +879,104 @@ function Inventory() {
         )}
       </Card>
 
-      {receiptItems.length > 0 && (
+      {hasAnyReceiptItems && (
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium">Receipt</div>
+              <div className="text-sm font-medium">Receipt {activeReceiptIndex + 1}</div>
+              <div className="text-xs text-muted-foreground">
+                Items are added to the selected receipt.
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={returnReceiptStock.isPending}
-              onClick={() => void clearReceipt()}
-            >
-              <Trash2 className="size-4 mr-1.5" />
-              {returnReceiptStock.isPending ? "Returning..." : "Clear"}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={openNewReceipt}>
+                New receipt
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={returnReceiptStock.isPending || receiptItems.length === 0}
+                onClick={() => void clearReceipt()}
+              >
+                <Trash2 className="size-4 mr-1.5" />
+                {returnReceiptStock.isPending ? "Returning..." : "Clear"}
+              </Button>
+            </div>
           </div>
 
+          {showReceiptSelector && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {receiptDrafts.map((draft, index) => {
+                const itemCount = draft.items.reduce((sum, item) => sum + item.quantity, 0);
+                const subtotal = draft.items.reduce(
+                  (sum, item) => sum + item.quantity * item.unit_price,
+                  0,
+                );
+                const isActive = activeReceiptIndex === index;
+
+                return (
+                  <button
+                    key={receiptDraftSlots[index]}
+                    type="button"
+                    className={`rounded-md border p-3 text-left transition-colors ${
+                      isActive
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "hover:border-primary/50 hover:bg-muted/30"
+                    }`}
+                    onClick={() => setActiveReceiptIndex(index as 0 | 1)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">Receipt {index + 1}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {itemCount} item(s) · {money(subtotal)}
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          isActive
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isActive ? "Selected" : "Select"}
+                      </span>
+                    </div>
+                    {draft.items.length > 0 ? (
+                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        {draft.items.slice(0, 3).map((item) => (
+                          <div
+                            key={`${item.product_id ?? item.description}-${item.unit_price}`}
+                            className="flex justify-between gap-2"
+                          >
+                            <span className="truncate">
+                              {item.quantity}x {item.description}
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              {money(item.quantity * item.unit_price)}
+                            </span>
+                          </div>
+                        ))}
+                        {draft.items.length > 3 && (
+                          <div>+{draft.items.length - 3} more item(s)</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-xs text-muted-foreground">Ready for items.</div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {receiptItems.length === 0 ? (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Scan or click a product to add it to Receipt {activeReceiptIndex + 1}.
+            </div>
+          ) : (
+            <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-muted-foreground">
@@ -1001,6 +1158,8 @@ function Inventory() {
             <Printer className="size-4 mr-1.5" />
             {saveReceipt.isPending ? "Saving…" : "Save & Print"}
           </Button>
+            </>
+          )}
         </Card>
       )}
 

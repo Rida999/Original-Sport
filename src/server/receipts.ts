@@ -191,6 +191,17 @@ export const getDraftReceipt = createServerFn({ method: "GET" }).handler(async (
   return { items: row?.items ?? [], updated_at: row?.updated_at ?? null };
 });
 
+export const getReceiptDraftSlot = createServerFn({ method: "GET" })
+  .validator((data: { slot: string }) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    const row = await one<{ items: ReceiptDraftLine[]; updated_at: string }>(
+      "select items, updated_at from receipt_draft where id = $1",
+      [data.slot],
+    );
+    return { items: row?.items ?? [], updated_at: row?.updated_at ?? null };
+  });
+
 export const saveDraftReceipt = createServerFn({ method: "POST" })
   .validator((data: { items: ReceiptDraftLine[] }) => data)
   .handler(async ({ data }) => {
@@ -199,6 +210,18 @@ export const saveDraftReceipt = createServerFn({ method: "POST" })
       `insert into receipt_draft (id, items, updated_at) values ('default', $1, now())
        on conflict (id) do update set items = excluded.items, updated_at = excluded.updated_at`,
       [JSON.stringify(data.items)],
+    );
+    return { ok: true };
+  });
+
+export const saveReceiptDraftSlot = createServerFn({ method: "POST" })
+  .validator((data: { slot: string; items: ReceiptDraftLine[] }) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    await one(
+      `insert into receipt_draft (id, items, updated_at) values ($1, $2, now())
+       on conflict (id) do update set items = excluded.items, updated_at = excluded.updated_at`,
+      [data.slot, JSON.stringify(data.items)],
     );
     return { ok: true };
   });
