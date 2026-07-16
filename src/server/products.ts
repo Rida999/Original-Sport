@@ -113,6 +113,17 @@ export const listArchivedProducts = createServerFn({ method: "GET" }).handler(as
   );
 });
 
+export const listProductBrands = createServerFn({ method: "GET" }).handler(async () => {
+  const { query } = await import("./db.server");
+  const rows = await query<{ sub_brand: string }>(
+    `select distinct trim(sub_brand) as sub_brand
+     from products
+     where nullif(trim(sub_brand), '') is not null
+     order by trim(sub_brand)`,
+  );
+  return rows.map((row) => row.sub_brand);
+});
+
 export const getProduct = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
