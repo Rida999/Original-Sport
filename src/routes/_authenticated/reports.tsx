@@ -55,6 +55,13 @@ const formatDayLabel = (value: string) => {
 const monthInputValue = (date = new Date()) => localDateInputValue(date).slice(0, 7);
 const currentYear = new Date().getFullYear();
 type ReportPickerMode = "day" | "month" | "year";
+const formatReportDateTime = (value: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "short",
+    timeStyle: "short",
+    hour12: false,
+    timeZone: "Asia/Beirut",
+  }).format(new Date(value));
 
 function Reports() {
   const [period, setPeriod] = useState<SalesReportPeriod>("today");
@@ -99,7 +106,7 @@ function Reports() {
       product.quantity_sold,
       product.selling_price,
       product.total_sales,
-      new Date(product.last_sold_at).toLocaleString(),
+      formatReportDateTime(product.last_sold_at),
     ]);
     const csv = [headers, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
@@ -460,7 +467,7 @@ function Reports() {
                   <div className="min-w-0">
                     <div className="font-medium">#{receipt.invoice_number}</div>
                     <div className="text-xs text-muted-foreground">
-                      {receipt.item_count} item(s) · {new Date(receipt.created_at).toLocaleString()}
+                      {receipt.item_count} item(s) · {formatReportDateTime(receipt.created_at)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
