@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { Product } from "./products";
 
+const REPORT_TIME_ZONE = "Asia/Beirut";
+
 export type SoldProductReport = {
   id: string;
   article_number: string;
@@ -18,6 +20,7 @@ export type SalesReportPeriod =
   | "month"
   | "year"
   | "date"
+  | "custom_week"
   | "custom_month"
   | "custom_year";
 
@@ -89,6 +92,16 @@ export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(a
 });
 
 const salesPeriodSql = (period: SalesReportPeriod) => {
+  if (period === "custom_week") {
+    return {
+      start: "date_trunc('week', $1::date)",
+      end: "date_trunc('week', $1::date) + interval '1 week'",
+      step: "interval '1 day'",
+      bucket: "day",
+      label: "Dy",
+    };
+  }
+
   if (period === "custom_year") {
     return {
       start: "date_trunc('year', $1::date)",
@@ -121,8 +134,8 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
 
   if (period === "today") {
     return {
-      start: "date_trunc('day', now())",
-      end: "date_trunc('day', now()) + interval '1 day'",
+      start: "$1::date",
+      end: "$1::date + interval '1 day'",
       step: "interval '1 hour'",
       bucket: "hour",
       label: "HH24:00",
@@ -131,8 +144,8 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
 
   if (period === "week") {
     return {
-      start: "date_trunc('week', now())",
-      end: "date_trunc('week', now()) + interval '1 week'",
+      start: "date_trunc('week', $1::date)",
+      end: "date_trunc('week', $1::date) + interval '1 week'",
       step: "interval '1 day'",
       bucket: "day",
       label: "Dy",
@@ -141,8 +154,8 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
 
   if (period === "year") {
     return {
-      start: "date_trunc('year', now())",
-      end: "date_trunc('year', now()) + interval '1 year'",
+      start: "date_trunc('year', $1::date)",
+      end: "date_trunc('year', $1::date) + interval '1 year'",
       step: "interval '1 month'",
       bucket: "month",
       label: "Mon",
@@ -150,8 +163,8 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
   }
 
   return {
-    start: "date_trunc('month', now())",
-    end: "date_trunc('month', now()) + interval '1 month'",
+    start: "date_trunc('month', $1::date)",
+    end: "date_trunc('month', $1::date) + interval '1 month'",
     step: "interval '1 day'",
     bucket: "day",
     label: "Mon DD",
@@ -166,19 +179,15 @@ export const getSalesReport = createServerFn({ method: "GET" })
       data.period === "month" ||
       data.period === "year" ||
       data.period === "date" ||
+      data.period === "custom_week" ||
       data.period === "custom_month" ||
       data.period === "custom_year"
         ? data.period
         : "today";
-    const selectedDate =
-      (period === "date" || period === "custom_month" || period === "custom_year") &&
-      /^\d{4}-\d{2}-\d{2}$/.test(data.date ?? "")
+    const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(data.date ?? "")
         ? data.date
         : new Date().toISOString().slice(0, 10);
-    const params =
-      period === "date" || period === "custom_month" || period === "custom_year"
-        ? [selectedDate]
-        : [];
+    const params = [selectedDate];
     const range = salesPeriodSql(period);
     const { one, query } = await import("./db.server");
 
@@ -191,7 +200,8 @@ export const getSalesReport = createServerFn({ method: "GET" })
       `with filtered_receipts as (
          select id, total
          from receipts
-         where created_at >= ${range.start} and created_at < ${range.end}
+         where created_at at time zone '${REPORT_TIME_ZONE}' >= ${range.start}
+           and created_at at time zone '${REPORT_TIME_ZONE}' < ${range.end}
        ),
        item_totals as (
          select receipt_id, sum(quantity) as quantity
@@ -219,9 +229,9 @@ export const getSalesReport = createServerFn({ method: "GET" })
          count(r.id)::int as receipts
        from buckets b
        left join receipts r
-         on date_trunc('${range.bucket}', r.created_at) = b.bucket_start
-        and r.created_at >= ${range.start}
-        and r.created_at < ${range.end}
+         on date_trunc('${range.bucket}', r.created_at at time zone '${REPORT_TIME_ZONE}') = b.bucket_start
+        and r.created_at at time zone '${REPORT_TIME_ZONE}' >= ${range.start}
+        and r.created_at at time zone '${REPORT_TIME_ZONE}' < ${range.end}
        group by b.bucket_start
        order by b.bucket_start`,
       params,
@@ -239,7 +249,8 @@ export const getSalesReport = createServerFn({ method: "GET" })
        from receipt_items ri
        join receipts r on r.id = ri.receipt_id
        left join products p on p.id = ri.product_id
-       where r.created_at >= ${range.start} and r.created_at < ${range.end}
+       where r.created_at at time zone '${REPORT_TIME_ZONE}' >= ${range.start}
+         and r.created_at at time zone '${REPORT_TIME_ZONE}' < ${range.end}
        group by coalesce(p.id::text, ri.product_id::text, ri.description), p.article_number, p.name, ri.description
        order by quantity_sold desc, total_sales desc
        limit 6`,
@@ -257,7 +268,8 @@ export const getSalesReport = createServerFn({ method: "GET" })
          r.created_at
        from receipts r
        left join receipt_items ri on ri.receipt_id = r.id
-       where r.created_at >= ${range.start} and r.created_at < ${range.end}
+       where r.created_at at time zone '${REPORT_TIME_ZONE}' >= ${range.start}
+         and r.created_at at time zone '${REPORT_TIME_ZONE}' < ${range.end}
        group by r.id
        order by r.created_at desc
        limit 5`,
