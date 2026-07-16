@@ -135,6 +135,7 @@ const discountOptions = [5, 10, 15] as const;
 const RECEIPT_DRAFT_KEY = "original-sport-receipt-draft";
 const RECEIPT_DRAFTS_KEY = "original-sport-receipt-drafts-v2";
 const receiptDraftSlots = ["receipt-a", "receipt-b"] as const;
+const clampPercent = (percent: number) => Math.min(100, Math.max(0, percent));
 
 const emptyReceiptDraft = (): ReceiptDraft => ({
   items: [],
@@ -379,7 +380,9 @@ function Inventory() {
   );
   const receiptItemCount = receiptItems.reduce((sum, item) => sum + item.quantity, 0);
   const activeDiscountPercent =
-    discountMode === "custom" ? Number(customDiscountPercent) || 0 : discountPercent;
+    discountMode === "custom"
+      ? clampPercent(Number(customDiscountPercent) || 0)
+      : clampPercent(discountPercent);
   const suggestedDiscount = Math.min(
     receiptSubtotal,
     Math.max(0, receiptSubtotal * (activeDiscountPercent / 100)),
@@ -1077,8 +1080,14 @@ function Inventory() {
                   type="text"
                   value={customDiscountPercent}
                   onChange={(e) => {
-                    setCustomDiscountPercent(e.target.value);
-                    const pct = Number(e.target.value) || 0;
+                    const value = e.target.value.replace(/[^0-9.]/g, "");
+                    const [whole, ...decimalParts] = value.split(".");
+                    const normalized = decimalParts.length
+                      ? `${whole}.${decimalParts.join("").slice(0, 2)}`
+                      : whole;
+                    const pct = clampPercent(Number(normalized) || 0);
+                    const nextValue = normalized === "" ? "" : String(pct);
+                    setCustomDiscountPercent(nextValue);
                     const suggestion = Math.min(
                       receiptSubtotal,
                       Math.max(0, receiptSubtotal * (pct / 100)),
