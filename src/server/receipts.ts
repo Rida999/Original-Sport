@@ -68,7 +68,13 @@ export const createReceipt = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }): Promise<ReceiptWithItems> => {
-    if (data.items.length === 0) throw new Error("Receipt has no items.");
+    const validItems = data.items.filter(
+      (item) =>
+        item.description.trim().length > 0 &&
+        Number(item.quantity) > 0 &&
+        Number(item.unit_price) >= 0,
+    );
+    if (validItems.length === 0) throw new Error("Receipt has no items.");
 
     const { getPool } = await import("./db.server");
     const pool = getPool();
@@ -76,7 +82,7 @@ export const createReceipt = createServerFn({ method: "POST" })
     try {
       await client.query("begin");
 
-      const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
       // Total/cash_exchange can be rounded manually at checkout, so trust an
       // explicit value from the client when given rather than only deriving
@@ -107,7 +113,7 @@ export const createReceipt = createServerFn({ method: "POST" })
       if (!savedReceipt) throw new Error("Could not create receipt.");
 
       const items: ReceiptItem[] = [];
-      for (const item of data.items) {
+      for (const item of validItems) {
         const row = await client.query<ReceiptItem>(
           `insert into receipt_items (receipt_id, product_id, description, quantity, unit_price, total)
            values ($1, $2, $3, $4, $5, $6)
