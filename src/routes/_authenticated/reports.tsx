@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CalendarDays, Download, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
@@ -23,8 +23,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { money } from "@/lib/format";
+import { isSuperAdmin } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/reports")({
+  beforeLoad: () => {
+    if (!isSuperAdmin()) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   head: () => ({ meta: [{ title: "Reports — SportsWear Inventory" }] }),
   component: Reports,
 });
@@ -106,10 +112,10 @@ function Reports() {
     period === "custom_week"
       ? selectedWeekDate
       : period === "custom_month"
-      ? `${selectedMonth}-01`
-      : period === "custom_year"
-        ? `${selectedYear}-01-01`
-        : selectedDate;
+        ? `${selectedMonth}-01`
+        : period === "custom_year"
+          ? `${selectedYear}-01-01`
+          : selectedDate;
   const { data: report, isLoading } = useQuery({
     queryKey: ["sales-report", period, reportDate],
     queryFn: async () => getSalesReport({ data: { period, date: reportDate } }),
@@ -155,18 +161,18 @@ function Reports() {
         ? isCurrentWeekReport
           ? "this week"
           : `Week: ${formatWeekLabel(selectedWeekDate)}`
-      : period === "custom_month"
-        ? `Month: ${dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(undefined, {
-            month: "long",
-            year: "numeric",
-          })}`
-        : period === "custom_year"
-          ? selectedYear === String(currentYear)
-            ? "this year"
-            : `Year: ${selectedYear}`
-          : period === "year"
-            ? "this year"
-          : periodOptions.find((option) => option.value === period)?.label;
+        : period === "custom_month"
+          ? `Month: ${dateFromInputValue(`${selectedMonth}-01`).toLocaleDateString(undefined, {
+              month: "long",
+              year: "numeric",
+            })}`
+          : period === "custom_year"
+            ? selectedYear === String(currentYear)
+              ? "this year"
+              : `Year: ${selectedYear}`
+            : period === "year"
+              ? "this year"
+              : periodOptions.find((option) => option.value === period)?.label;
   const selectedDateLabel = dateFromInputValue(selectedDate).toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
@@ -186,9 +192,9 @@ function Reports() {
       ? selectedDateLabel
       : pickerMode === "week"
         ? selectedWeekLabel
-      : pickerMode === "month"
-        ? selectedMonthLabel
-        : selectedYear;
+        : pickerMode === "month"
+          ? selectedMonthLabel
+          : selectedYear;
 
   const viewSelectedReport = () => {
     if (pickerMode === "day") {
@@ -280,7 +286,8 @@ function Reports() {
                 <div>
                   <DialogTitle>Select previous report date</DialogTitle>
                   <DialogDescription>
-                    Pick a day, week, month, or year to review its sales, receipts, and sold products.
+                    Pick a day, week, month, or year to review its sales, receipts, and sold
+                    products.
                   </DialogDescription>
                 </div>
               </div>
@@ -383,19 +390,10 @@ function Reports() {
                 </div>
               </div>
               <div className="flex gap-2 sm:shrink-0">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={viewSelectedReport}
-                >
+                <Button type="button" size="sm" onClick={viewSelectedReport}>
                   View report
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={setPreviousPreset}
-                >
+                <Button type="button" size="sm" variant="outline" onClick={setPreviousPreset}>
                   Previous {pickerMode}
                 </Button>
               </div>
