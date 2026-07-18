@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Printer, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -9,8 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listAllReceipts } from "@/server/receipts";
 import { money } from "@/lib/format";
+import { isSuperAdmin } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/receipts")({
+  beforeLoad: () => {
+    if (!isSuperAdmin()) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   head: () => ({ meta: [{ title: "Receipts — SportsWear Inventory" }] }),
   component: ReceiptsPage,
 });
