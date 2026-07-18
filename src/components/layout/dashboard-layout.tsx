@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Package,
@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { signOut } from "@/lib/auth";
+import { isSignedIn, signOut } from "@/lib/auth";
 import logo from "@/assets/logo.png";
 
 const nav = [
@@ -38,6 +38,7 @@ const getInitialNightMode = () => {
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const [nightMode, setNightMode] = useState(getInitialNightMode);
@@ -46,8 +47,25 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const handleSignOut = () => {
     signOut();
-    window.location.href = "/signin";
+    navigate({ to: "/signin", replace: true });
   };
+
+  useEffect(() => {
+    const handlePageShow = () => {
+      if (!isSignedIn()) {
+        navigate({ to: "/signin", replace: true });
+      }
+    };
+
+    handlePageShow();
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handlePageShow);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handlePageShow);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", nightMode);
