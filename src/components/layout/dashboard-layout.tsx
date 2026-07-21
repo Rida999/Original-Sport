@@ -44,9 +44,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [nightMode, setNightMode] = useState(getInitialNightMode);
   const currentUser = getCurrentUser();
   const visibleNav =
-    currentUser === "superadmin"
-      ? nav
-      : nav.filter((item) => item.to !== "/receipts" && item.to !== "/reports");
+    currentUser === "superadmin" ? nav : nav.filter((item) => item.to !== "/reports");
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
 

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Printer, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -9,20 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listAllReceipts } from "@/server/receipts";
 import { money } from "@/lib/format";
-import { isSuperAdmin } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/receipts")({
-  beforeLoad: () => {
-    if (!isSuperAdmin()) {
-      throw redirect({ to: "/dashboard" });
-    }
-  },
   head: () => ({ meta: [{ title: "Receipts — SportsWear Inventory" }] }),
   component: ReceiptsPage,
 });
 
 function ReceiptsPage() {
   const [q, setQ] = useState("");
+  const currentUser = getCurrentUser();
+  const showTodayOnly = currentUser !== "superadmin";
   const { data, isLoading } = useQuery({
     queryKey: ["all-receipts"],
     queryFn: async () => listAllReceipts(),
@@ -30,20 +27,28 @@ function ReceiptsPage() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
+    const today = new Date();
+    const todayDate = today.toDateString();
     const term = q.toLowerCase().trim();
-    if (!term) return data;
-    return data.filter((receipt) =>
+    const visibleReceipts = showTodayOnly
+      ? data.filter((receipt) => new Date(receipt.created_at).toDateString() === todayDate)
+      : data;
+
+    if (!term) return visibleReceipts;
+    return visibleReceipts.filter((receipt) =>
       [String(receipt.invoice_number), receipt.customer_name]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term)),
     );
-  }, [data, q]);
+  }, [data, q, showTodayOnly]);
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Receipts</h1>
-        <p className="text-sm text-muted-foreground">{data?.length ?? 0} total</p>
+        <p className="text-sm text-muted-foreground">
+          {filtered.length} {showTodayOnly ? "today" : "total"}
+        </p>
       </div>
 
       <div className="relative max-w-md">
@@ -81,7 +86,7 @@ function ReceiptsPage() {
               {!isLoading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-10 text-center text-muted-foreground">
-                    No receipts yet.
+                    {showTodayOnly ? "No receipts for today yet." : "No receipts yet."}
                   </td>
                 </tr>
               )}

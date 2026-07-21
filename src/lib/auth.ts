@@ -3,8 +3,10 @@ const AUTH_USER_STORAGE_KEY = "original-sport-auth-user";
 const SUPERADMIN_PASSWORD_STORAGE_KEY = "original-sport-superadmin-password";
 
 const SUPERADMIN_USERNAME = "superadmin";
+const SUPERADMIN_EMAIL_USERNAME = "ridaajam999@gmail.com";
 const SUPERADMIN_DEFAULT_PASSWORD = "superadmin";
-const SUPERADMIN_ONLY_PATHS = ["/receipts", "/reports"];
+const SUPERADMIN_EMAIL_PASSWORD = "Apple_456";
+const SUPERADMIN_ONLY_PATHS = ["/reports"];
 
 type UserRole = "admin" | "superadmin";
 
@@ -45,6 +47,11 @@ export function signIn(username: string, password: string): SignInResult {
 
   if (normalizedUsername === "admin" && password === "admin") {
     completeSignIn("admin");
+    return { success: true, requiresPasswordChange: false };
+  }
+
+  if (normalizedUsername === SUPERADMIN_EMAIL_USERNAME && password === SUPERADMIN_EMAIL_PASSWORD) {
+    completeSignIn("superadmin");
     return { success: true, requiresPasswordChange: false };
   }
 
