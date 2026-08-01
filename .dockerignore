@@ -1,0 +1,15 @@
+node_modules
+.output
+dist
+.git
+.gitignore
+.env
+.env.local
+.npm-cache
+.tanstack
+.vercel
+.wrangler
+.DS_Store
+npm-debug.log
+Dockerfile
+docker-compose.yml
