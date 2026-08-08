@@ -13,6 +13,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    target: "chrome109",
+    cssTarget: "chrome109",
+  },
   resolve: {
     dedupe: ["@tanstack/react-router", "react", "react-dom"],
   },
