@@ -22,6 +22,7 @@ import { Route as PrintReceiptIdRouteImport } from './routes/print/receipt/$id'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products/new'
 import { Route as AuthenticatedProductsIdRouteImport } from './routes/_authenticated/products/$id'
 
+// test
 const SigninRoute = SigninRouteImport.update({
   id: '/signin',
   path: '/signin',
