@@ -17,6 +17,7 @@ async function getServerEntry(): Promise<ServerEntry> {
   }
   return serverEntryPromise;
 }
+//test
 
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
