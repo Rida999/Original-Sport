@@ -64,7 +64,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "SportsWear Inventory" },
       { name: "description", content: "Admin inventory management for your sportswear store." },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "./favicon.png" },
+      { rel: "apple-touch-icon", href: "/favicon.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,

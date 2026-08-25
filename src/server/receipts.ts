@@ -30,7 +30,16 @@ export type Receipt = {
   created_at: string;
 };
 
+export type ReceiptListItem = Receipt & { item_count: number };
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[] };
+export type ReceiptUpdateInput = {
+  id: string;
+  customer_name?: string | null;
+  discount?: number;
+  total?: number;
+  cash_paid?: number;
+  cash_exchange?: number;
+};
 
 const VAT_RATE = 11;
 
@@ -152,7 +161,7 @@ export const createReceipt = createServerFn({ method: "POST" })
 
 export const listRecentReceipts = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
-  const rows = await query<Receipt & { item_count: number }>(
+  const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
             r.vat_amount, r.total, r.cash_paid, r.cash_exchange, r.created_at,
             count(ri.id)::int as item_count
@@ -167,7 +176,7 @@ export const listRecentReceipts = createServerFn({ method: "GET" }).handler(asyn
 
 export const listAllReceipts = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
-  const rows = await query<Receipt & { item_count: number }>(
+  const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
             r.vat_amount, r.total, r.cash_paid, r.cash_exchange, r.created_at,
             count(ri.id)::int as item_count
@@ -178,6 +187,63 @@ export const listAllReceipts = createServerFn({ method: "GET" }).handler(async (
   );
   return rows.map(toReceipt);
 });
+
+export const updateReceipt = createServerFn({ method: "POST" })
+  .validator((data: ReceiptUpdateInput) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    const total = Math.max(0, Number(data.total || 0));
+    const cashPaid = Math.max(0, Number(data.cash_paid || 0));
+    const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
+    const updated = await one<Receipt>(
+      `update receipts
+       set customer_name = $2,
+           discount = $3,
+           total = $4,
+           vat_amount = $4 * (vat_rate / 100),
+           cash_paid = $5,
+           cash_exchange = $6
+       where id = $1
+       returning id, invoice_number, customer_name, subtotal, discount, vat_rate, vat_amount,
+                 total, cash_paid, cash_exchange, created_at`,
+      [
+        data.id,
+        data.customer_name?.trim() || null,
+        Math.max(0, Number(data.discount || 0)),
+        total,
+        cashPaid,
+        cashExchange,
+      ],
+    );
+
+    if (!updated) throw new Error("Receipt not found.");
+
+    await one(
+      "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
+      ["receipt_updated", "receipt", updated.id, { invoice_number: updated.invoice_number }],
+    );
+
+    return toReceipt(updated);
+  });
+
+export const deleteReceipt = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    const deleted = await one<{ id: string; invoice_number: number }>(
+      "delete from receipts where id = $1 returning id, invoice_number",
+      [data.id],
+    );
+
+    if (!deleted) throw new Error("Receipt not found.");
+
+    await one(
+      "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
+      ["receipt_deleted", "receipt", deleted.id, { invoice_number: deleted.invoice_number }],
+    );
+
+    return { ok: true };
+  });
 
 export type ReceiptDraftLine = {
   product_id: string | null;
