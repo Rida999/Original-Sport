@@ -147,6 +147,7 @@ function ReceiptsPage() {
     [items],
   );
   const discount = numberFromInput(form.discount);
+  const discountTooHigh = discount > subtotal;
   const total = Math.max(0, subtotal - discount);
 
   const loadReceipt = useMutation({
@@ -243,6 +244,10 @@ function ReceiptsPage() {
       toast.error("Receipt needs at least one item");
       return;
     }
+    if (discountTooHigh) {
+      toast.error("Discount cannot be more than subtotal");
+      return;
+    }
     editReceipt.mutate();
   };
 
@@ -319,7 +324,7 @@ function ReceiptsPage() {
                       </Button>
                       <Button
                         size="icon"
-                        variant="outline"
+                        variant="ghost"
                         aria-label="Edit receipt"
                         title="Edit receipt"
                         disabled={loadingReceiptId === receipt.id}
@@ -330,10 +335,10 @@ function ReceiptsPage() {
                       </Button>
                       <Button
                         size="icon"
-                        variant="outline"
+                        variant="ghost"
                         aria-label="Delete receipt"
                         title="Delete receipt"
-                        className="hover:border-destructive/40 hover:text-destructive"
+                        className="hover:text-destructive"
                         onClick={() => setDeletingReceipt(receipt)}
                       >
                         <Trash2 className="size-4" />
@@ -459,8 +464,17 @@ function ReceiptsPage() {
                   id="receipt-discount"
                   inputMode="decimal"
                   value={form.discount}
+                  aria-invalid={discountTooHigh}
+                  className={
+                    discountTooHigh
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : undefined
+                  }
                   onChange={(event) => updateForm("discount", event.target.value)}
                 />
+                {discountTooHigh && (
+                  <p className="text-xs text-destructive">Discount cannot be more than subtotal.</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="receipt-cash-paid">Cash paid</Label>
@@ -501,7 +515,7 @@ function ReceiptsPage() {
               <Button type="button" variant="outline" onClick={() => setEditingReceipt(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={editReceipt.isPending}>
+              <Button type="submit" disabled={editReceipt.isPending || discountTooHigh}>
                 {editReceipt.isPending ? "Saving..." : "Save changes"}
               </Button>
             </DialogFooter>

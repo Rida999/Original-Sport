@@ -93,6 +93,7 @@ export const createReceipt = createServerFn({ method: "POST" })
 
       const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
+      if (discount > subtotal) throw new Error("Discount cannot be more than subtotal.");
       // Total/cash_exchange can be rounded manually at checkout, so trust an
       // explicit value from the client when given rather than only deriving
       // it from subtotal/discount or cash_paid.
@@ -207,7 +208,8 @@ export const updateReceipt = createServerFn({ method: "POST" })
 
       const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
-      const total = Math.max(0, subtotal - discount);
+      if (discount > subtotal) throw new Error("Discount cannot be more than subtotal.");
+      const total = subtotal - discount;
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
 
