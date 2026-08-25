@@ -83,14 +83,18 @@ const receiptItemsFromReceipt = (receipt: ReceiptWithItems): ReceiptItemForm[] =
     unit_price: String(Number(item.unit_price || 0)),
   }));
 
+const MAX_NUMBER_DIGITS = 9;
+
 const moneyInputValue = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, "");
   const [whole, ...decimalParts] = cleaned.split(".");
+  const cappedWhole = whole.slice(0, MAX_NUMBER_DIGITS);
   const decimals = decimalParts.join("").slice(0, 2);
-  return cleaned.includes(".") ? whole + "." + decimals : whole;
+  return cleaned.includes(".") ? cappedWhole + "." + decimals : cappedWhole;
 };
 
-const integerInputValue = (value: string) => value.replace(/[^0-9]/g, "");
+const integerInputValue = (value: string) =>
+  value.replace(/[^0-9]/g, "").slice(0, MAX_NUMBER_DIGITS);
 
 const numberFromInput = (value: string) => Number(value || 0);
 
@@ -416,6 +420,7 @@ function ReceiptsPage() {
                       <Input
                         id={"receipt-item-quantity-" + item.row_id}
                         inputMode="numeric"
+                        maxLength={9}
                         value={item.quantity}
                         onChange={(event) =>
                           updateItem(item.row_id, "quantity", event.target.value)
@@ -429,6 +434,7 @@ function ReceiptsPage() {
                       <Input
                         id={"receipt-item-price-" + item.row_id}
                         inputMode="decimal"
+                        maxLength={12}
                         value={item.unit_price}
                         onChange={(event) =>
                           updateItem(item.row_id, "unit_price", event.target.value)
@@ -463,6 +469,7 @@ function ReceiptsPage() {
                 <Input
                   id="receipt-discount"
                   inputMode="decimal"
+                  maxLength={12}
                   value={form.discount}
                   aria-invalid={discountTooHigh}
                   className={
@@ -481,6 +488,7 @@ function ReceiptsPage() {
                 <Input
                   id="receipt-cash-paid"
                   inputMode="decimal"
+                  maxLength={12}
                   value={form.cash_paid}
                   onChange={(event) => updateForm("cash_paid", event.target.value)}
                 />
@@ -490,6 +498,7 @@ function ReceiptsPage() {
                 <Input
                   id="receipt-cash-exchange"
                   inputMode="decimal"
+                  maxLength={12}
                   value={form.cash_exchange}
                   onChange={(event) => updateForm("cash_exchange", event.target.value)}
                 />

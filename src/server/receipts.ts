@@ -42,6 +42,27 @@ export type ReceiptUpdateInput = {
 };
 
 const VAT_RATE = 11;
+const MAX_NUMBER = 999_999_999;
+
+const ensureMaxNumber = (value: number, label: string) => {
+  if (value > MAX_NUMBER) throw new Error(label + " cannot be more than 9 digits.");
+};
+
+const validateReceiptNumbers = (
+  items: ReceiptItemInput[],
+  discount: number,
+  cashPaid: number,
+  cashExchange: number,
+) => {
+  ensureMaxNumber(discount, "Discount");
+  ensureMaxNumber(cashPaid, "Cash paid");
+  ensureMaxNumber(cashExchange, "Change");
+  for (const item of items) {
+    ensureMaxNumber(Number(item.quantity), "Quantity");
+    ensureMaxNumber(Number(item.unit_price), "Unit price");
+    ensureMaxNumber(Number(item.quantity) * Number(item.unit_price), "Item total");
+  }
+};
 
 // node-postgres returns NUMERIC columns as strings (to avoid float precision
 // loss), so every numeric field must be coerced back to a real JS number here
@@ -101,6 +122,9 @@ export const createReceipt = createServerFn({ method: "POST" })
       const vatAmount = total * (VAT_RATE / 100);
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
+      validateReceiptNumbers(validItems, discount, cashPaid, cashExchange);
+      ensureMaxNumber(subtotal, "Subtotal");
+      ensureMaxNumber(total, "Total");
 
       const receipt = await client.query<Receipt>(
         `insert into receipts (
@@ -212,6 +236,9 @@ export const updateReceipt = createServerFn({ method: "POST" })
       const total = subtotal - discount;
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
+      validateReceiptNumbers(validItems, discount, cashPaid, cashExchange);
+      ensureMaxNumber(subtotal, "Subtotal");
+      ensureMaxNumber(total, "Total");
 
       const receipt = await client.query<Receipt>(
         `update receipts
