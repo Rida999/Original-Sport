@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -29,9 +29,12 @@ import {
 } from "@/components/ui/dialog";
 import {
   deleteReceipt,
+  getReceipt,
   listAllReceipts,
   updateReceipt,
+  type ReceiptItemInput,
   type ReceiptListItem,
+  type ReceiptWithItems,
 } from "@/server/receipts";
 import { money } from "@/lib/format";
 import { getCurrentUser } from "@/lib/auth";
@@ -44,18 +47,41 @@ export const Route = createFileRoute("/_authenticated/receipts")({
 type ReceiptForm = {
   customer_name: string;
   discount: string;
-  total: string;
   cash_paid: string;
   cash_exchange: string;
 };
 
-const receiptFormFromReceipt = (receipt: ReceiptListItem): ReceiptForm => ({
+type ReceiptItemForm = {
+  row_id: string;
+  product_id: string | null;
+  description: string;
+  quantity: string;
+  unit_price: string;
+};
+
+const emptyItem = (): ReceiptItemForm => ({
+  row_id: crypto.randomUUID(),
+  product_id: null,
+  description: "",
+  quantity: "1",
+  unit_price: "0",
+});
+
+const receiptFormFromReceipt = (receipt: ReceiptWithItems): ReceiptForm => ({
   customer_name: receipt.customer_name ?? "",
   discount: String(Number(receipt.discount || 0)),
-  total: String(Number(receipt.total || 0)),
   cash_paid: String(Number(receipt.cash_paid || 0)),
   cash_exchange: String(Number(receipt.cash_exchange || 0)),
 });
+
+const receiptItemsFromReceipt = (receipt: ReceiptWithItems): ReceiptItemForm[] =>
+  receipt.items.map((item) => ({
+    row_id: item.id,
+    product_id: item.product_id,
+    description: item.description,
+    quantity: String(Number(item.quantity || 0)),
+    unit_price: String(Number(item.unit_price || 0)),
+  }));
 
 const moneyInputValue = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, "");
@@ -64,19 +90,29 @@ const moneyInputValue = (value: string) => {
   return cleaned.includes(".") ? whole + "." + decimals : whole;
 };
 
+const integerInputValue = (value: string) => value.replace(/[^0-9]/g, "");
+
 const numberFromInput = (value: string) => Number(value || 0);
+
+const itemInputFromForm = (item: ReceiptItemForm): ReceiptItemInput => ({
+  product_id: item.product_id,
+  description: item.description.trim(),
+  quantity: Math.max(0, Math.floor(numberFromInput(item.quantity))),
+  unit_price: numberFromInput(item.unit_price),
+});
 
 function ReceiptsPage() {
   const [q, setQ] = useState("");
-  const [editingReceipt, setEditingReceipt] = useState<ReceiptListItem | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<ReceiptWithItems | null>(null);
   const [deletingReceipt, setDeletingReceipt] = useState<ReceiptListItem | null>(null);
+  const [loadingReceiptId, setLoadingReceiptId] = useState<string | null>(null);
   const [form, setForm] = useState<ReceiptForm>({
     customer_name: "",
     discount: "0",
-    total: "0",
     cash_paid: "0",
     cash_exchange: "0",
   });
+  const [items, setItems] = useState<ReceiptItemForm[]>([emptyItem()]);
   const currentUser = getCurrentUser();
   const showTodayOnly = currentUser !== "superadmin";
   const qc = useQueryClient();
@@ -102,17 +138,45 @@ function ReceiptsPage() {
     );
   }, [data, q, showTodayOnly]);
 
+  const subtotal = useMemo(
+    () =>
+      items.reduce(
+        (sum, item) => sum + numberFromInput(item.quantity) * numberFromInput(item.unit_price),
+        0,
+      ),
+    [items],
+  );
+  const discount = numberFromInput(form.discount);
+  const total = Math.max(0, subtotal - discount);
+
+  const loadReceipt = useMutation({
+    mutationFn: async (id: string) => getReceipt({ data: { id } }),
+    onMutate: (id) => setLoadingReceiptId(id),
+    onSuccess: (receipt) => {
+      if (!receipt) {
+        toast.error("Receipt not found");
+        return;
+      }
+      setEditingReceipt(receipt);
+      setForm(receiptFormFromReceipt(receipt));
+      setItems(receipt.items.length > 0 ? receiptItemsFromReceipt(receipt) : [emptyItem()]);
+    },
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => setLoadingReceiptId(null),
+  });
+
   const editReceipt = useMutation({
     mutationFn: async () => {
       if (!editingReceipt) throw new Error("No receipt selected.");
+      const receiptItems = items.map(itemInputFromForm);
       return updateReceipt({
         data: {
           id: editingReceipt.id,
           customer_name: form.customer_name,
-          discount: numberFromInput(form.discount),
-          total: numberFromInput(form.total),
+          discount,
           cash_paid: numberFromInput(form.cash_paid),
           cash_exchange: numberFromInput(form.cash_exchange),
+          items: receiptItems,
         },
       });
     },
@@ -145,8 +209,7 @@ function ReceiptsPage() {
   });
 
   const openEditDialog = (receipt: ReceiptListItem) => {
-    setEditingReceipt(receipt);
-    setForm(receiptFormFromReceipt(receipt));
+    loadReceipt.mutate(receipt.id);
   };
 
   const updateForm = (key: keyof ReceiptForm, value: string) => {
@@ -156,10 +219,28 @@ function ReceiptsPage() {
     }));
   };
 
+  const updateItem = (rowId: string, key: keyof ReceiptItemForm, value: string) => {
+    setItems((current) =>
+      current.map((item) => {
+        if (item.row_id !== rowId) return item;
+        const nextValue =
+          key === "quantity"
+            ? integerInputValue(value)
+            : key === "unit_price"
+              ? moneyInputValue(value)
+              : value;
+        return { ...item, [key]: nextValue };
+      }),
+    );
+  };
+
   const submitEdit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (numberFromInput(form.total) < 0) {
-      toast.error("Total cannot be negative");
+    const validItems = items
+      .map(itemInputFromForm)
+      .filter((item) => item.description && item.quantity > 0);
+    if (validItems.length === 0) {
+      toast.error("Receipt needs at least one item");
       return;
     }
     editReceipt.mutate();
@@ -195,7 +276,7 @@ function ReceiptsPage() {
                 <th className="p-3 font-medium text-right">Discount</th>
                 <th className="p-3 font-medium text-right">Total</th>
                 <th className="p-3 font-medium">Date</th>
-                <th className="p-3 w-64 text-right">Actions</th>
+                <th className="p-3 w-36 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -225,27 +306,38 @@ function ReceiptsPage() {
                     {new Date(receipt.created_at).toLocaleString()}
                   </td>
                   <td className="p-3">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1.5">
                       <Button
-                        size="sm"
+                        size="icon"
                         variant="ghost"
+                        aria-label="Print receipt"
+                        title="Print receipt"
                         onClick={() => window.open("/print/receipt/" + receipt.id, "_blank")}
                       >
-                        <Printer className="size-4 mr-1.5" />
-                        Print
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => openEditDialog(receipt)}>
-                        <Pencil className="size-4 mr-1.5" />
-                        Edit
+                        <Printer className="size-4" />
+                        <span className="sr-only">Print receipt</span>
                       </Button>
                       <Button
-                        size="sm"
+                        size="icon"
                         variant="outline"
+                        aria-label="Edit receipt"
+                        title="Edit receipt"
+                        disabled={loadingReceiptId === receipt.id}
+                        onClick={() => openEditDialog(receipt)}
+                      >
+                        <Pencil className="size-4" />
+                        <span className="sr-only">Edit receipt</span>
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        aria-label="Delete receipt"
+                        title="Delete receipt"
                         className="hover:border-destructive/40 hover:text-destructive"
                         onClick={() => setDeletingReceipt(receipt)}
                       >
-                        <Trash2 className="size-4 mr-1.5" />
-                        Delete
+                        <Trash2 className="size-4" />
+                        <span className="sr-only">Delete receipt</span>
                       </Button>
                     </div>
                   </td>
@@ -260,14 +352,14 @@ function ReceiptsPage() {
         open={Boolean(editingReceipt)}
         onOpenChange={(open) => !open && setEditingReceipt(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit receipt #{editingReceipt?.invoice_number}</DialogTitle>
             <DialogDescription>
-              Update receipt customer, discount, cash, and total values.
+              Change customer details, add or remove items, then save the receipt.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={submitEdit}>
+          <form className="space-y-5" onSubmit={submitEdit}>
             <div className="space-y-1.5">
               <Label htmlFor="receipt-customer">Customer</Label>
               <Input
@@ -276,7 +368,91 @@ function ReceiptsPage() {
                 onChange={(event) => updateForm("customer_name", event.target.value)}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Items</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setItems((current) => [...current, emptyItem()])}
+                >
+                  <Plus className="mr-1.5 size-4" />
+                  Add item
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {items.map((item, index) => (
+                  <div
+                    key={item.row_id}
+                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_44px]"
+                  >
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor={"receipt-item-description-" + item.row_id}
+                        className="text-xs"
+                      >
+                        Item {index + 1}
+                      </Label>
+                      <Input
+                        id={"receipt-item-description-" + item.row_id}
+                        value={item.description}
+                        onChange={(event) =>
+                          updateItem(item.row_id, "description", event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={"receipt-item-quantity-" + item.row_id} className="text-xs">
+                        Qty
+                      </Label>
+                      <Input
+                        id={"receipt-item-quantity-" + item.row_id}
+                        inputMode="numeric"
+                        value={item.quantity}
+                        onChange={(event) =>
+                          updateItem(item.row_id, "quantity", event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={"receipt-item-price-" + item.row_id} className="text-xs">
+                        Unit price
+                      </Label>
+                      <Input
+                        id={"receipt-item-price-" + item.row_id}
+                        inputMode="decimal"
+                        value={item.unit_price}
+                        onChange={(event) =>
+                          updateItem(item.row_id, "unit_price", event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Remove item"
+                        title="Remove item"
+                        className="hover:text-destructive"
+                        disabled={items.length === 1}
+                        onClick={() =>
+                          setItems((current) => current.filter((row) => row.row_id !== item.row_id))
+                        }
+                      >
+                        <X className="size-4" />
+                        <span className="sr-only">Remove item</span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="receipt-discount">Discount</Label>
                 <Input
@@ -284,15 +460,6 @@ function ReceiptsPage() {
                   inputMode="decimal"
                   value={form.discount}
                   onChange={(event) => updateForm("discount", event.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="receipt-total">Total</Label>
-                <Input
-                  id="receipt-total"
-                  inputMode="decimal"
-                  value={form.total}
-                  onChange={(event) => updateForm("total", event.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -314,6 +481,22 @@ function ReceiptsPage() {
                 />
               </div>
             </div>
+
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{money(subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="tabular-nums">{money(discount)}</span>
+              </div>
+              <div className="mt-2 flex justify-between border-t pt-2 font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{money(total)}</span>
+              </div>
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingReceipt(null)}>
                 Cancel
