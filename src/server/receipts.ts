@@ -30,9 +30,39 @@ export type Receipt = {
   created_at: string;
 };
 
+export type ReceiptListItem = Receipt & { item_count: number };
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[] };
+export type ReceiptUpdateInput = {
+  id: string;
+  customer_name?: string | null;
+  discount?: number;
+  cash_paid?: number;
+  cash_exchange?: number;
+  items: ReceiptItemInput[];
+};
 
 const VAT_RATE = 11;
+const MAX_NUMBER = 999_999_999;
+
+const ensureMaxNumber = (value: number, label: string) => {
+  if (value > MAX_NUMBER) throw new Error(label + " cannot be more than 9 digits.");
+};
+
+const validateReceiptNumbers = (
+  items: ReceiptItemInput[],
+  discount: number,
+  cashPaid: number,
+  cashExchange: number,
+) => {
+  ensureMaxNumber(discount, "Discount");
+  ensureMaxNumber(cashPaid, "Cash paid");
+  ensureMaxNumber(cashExchange, "Change");
+  for (const item of items) {
+    ensureMaxNumber(Number(item.quantity), "Quantity");
+    ensureMaxNumber(Number(item.unit_price), "Unit price");
+    ensureMaxNumber(Number(item.quantity) * Number(item.unit_price), "Item total");
+  }
+};
 
 // node-postgres returns NUMERIC columns as strings (to avoid float precision
 // loss), so every numeric field must be coerced back to a real JS number here
@@ -84,6 +114,7 @@ export const createReceipt = createServerFn({ method: "POST" })
 
       const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
+      if (discount > subtotal) throw new Error("Discount cannot be more than subtotal.");
       // Total/cash_exchange can be rounded manually at checkout, so trust an
       // explicit value from the client when given rather than only deriving
       // it from subtotal/discount or cash_paid.
@@ -91,6 +122,9 @@ export const createReceipt = createServerFn({ method: "POST" })
       const vatAmount = total * (VAT_RATE / 100);
       const cashPaid = Math.max(0, Number(data.cash_paid || 0));
       const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
+      validateReceiptNumbers(validItems, discount, cashPaid, cashExchange);
+      ensureMaxNumber(subtotal, "Subtotal");
+      ensureMaxNumber(total, "Total");
 
       const receipt = await client.query<Receipt>(
         `insert into receipts (
@@ -152,7 +186,7 @@ export const createReceipt = createServerFn({ method: "POST" })
 
 export const listRecentReceipts = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
-  const rows = await query<Receipt & { item_count: number }>(
+  const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
             r.vat_amount, r.total, r.cash_paid, r.cash_exchange, r.created_at,
             count(ri.id)::int as item_count
@@ -167,7 +201,7 @@ export const listRecentReceipts = createServerFn({ method: "GET" }).handler(asyn
 
 export const listAllReceipts = createServerFn({ method: "GET" }).handler(async () => {
   const { query } = await import("./db.server");
-  const rows = await query<Receipt & { item_count: number }>(
+  const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
             r.vat_amount, r.total, r.cash_paid, r.cash_exchange, r.created_at,
             count(ri.id)::int as item_count
@@ -178,6 +212,117 @@ export const listAllReceipts = createServerFn({ method: "GET" }).handler(async (
   );
   return rows.map(toReceipt);
 });
+
+export const updateReceipt = createServerFn({ method: "POST" })
+  .validator((data: ReceiptUpdateInput) => data)
+  .handler(async ({ data }): Promise<ReceiptWithItems> => {
+    const validItems = data.items.filter(
+      (item) =>
+        item.description.trim().length > 0 &&
+        Number(item.quantity) > 0 &&
+        Number(item.unit_price) >= 0,
+    );
+    if (validItems.length === 0) throw new Error("Receipt must have at least one item.");
+
+    const { getPool } = await import("./db.server");
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+
+      const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      const discount = Math.max(0, Number(data.discount || 0));
+      if (discount > subtotal) throw new Error("Discount cannot be more than subtotal.");
+      const total = subtotal - discount;
+      const cashPaid = Math.max(0, Number(data.cash_paid || 0));
+      const cashExchange = Math.max(0, Number(data.cash_exchange ?? cashPaid - total));
+      validateReceiptNumbers(validItems, discount, cashPaid, cashExchange);
+      ensureMaxNumber(subtotal, "Subtotal");
+      ensureMaxNumber(total, "Total");
+
+      const receipt = await client.query<Receipt>(
+        `update receipts
+         set customer_name = $2,
+             subtotal = $3,
+             discount = $4,
+             total = $5,
+             vat_amount = $5 * (vat_rate / 100),
+             cash_paid = $6,
+             cash_exchange = $7
+         where id = $1
+         returning id, invoice_number, customer_name, subtotal, discount, vat_rate, vat_amount,
+                   total, cash_paid, cash_exchange, created_at`,
+        [
+          data.id,
+          data.customer_name?.trim() || null,
+          subtotal,
+          discount,
+          total,
+          cashPaid,
+          cashExchange,
+        ],
+      );
+      const updated = receipt.rows[0];
+      if (!updated) throw new Error("Receipt not found.");
+
+      await client.query("delete from receipt_items where receipt_id = $1", [updated.id]);
+
+      const items: ReceiptItem[] = [];
+      for (const item of validItems) {
+        const row = await client.query<ReceiptItem>(
+          `insert into receipt_items (receipt_id, product_id, description, quantity, unit_price, total)
+           values ($1, $2, $3, $4, $5, $6)
+           returning id, product_id, description, quantity, unit_price, total`,
+          [
+            updated.id,
+            item.product_id,
+            item.description.trim(),
+            Number(item.quantity),
+            Number(item.unit_price),
+            Number(item.quantity) * Number(item.unit_price),
+          ],
+        );
+        if (row.rows[0]) items.push(toReceiptItem(row.rows[0]));
+      }
+
+      await client.query(
+        "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4)",
+        [
+          "receipt_updated",
+          "receipt",
+          updated.id,
+          { invoice_number: updated.invoice_number, item_count: items.length },
+        ],
+      );
+
+      await client.query("commit");
+      return { ...toReceipt(updated), items };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+export const deleteReceipt = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const { one } = await import("./db.server");
+    const deleted = await one<{ id: string; invoice_number: number }>(
+      "delete from receipts where id = $1 returning id, invoice_number",
+      [data.id],
+    );
+
+    if (!deleted) throw new Error("Receipt not found.");
+
+    await one(
+      "insert into activity_logs (action, entity_type, entity_id, metadata) values ($1, $2, $3, $4) returning id",
+      ["receipt_deleted", "receipt", deleted.id, { invoice_number: deleted.invoice_number }],
+    );
+
+    return { ok: true };
+  });
 
 export type ReceiptDraftLine = {
   product_id: string | null;
