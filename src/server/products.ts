@@ -163,6 +163,35 @@ const productValues = (product: ProductInput) => [
   product.status ?? (Number(product.quantity || 0) === 0 ? "out_of_stock" : "available"),
 ];
 
+const ensureImportHistorySchema = async (client: DbClient) => {
+  await client.query("alter table import_batches add column if not exists item_count integer not null default 0");
+  await client.query("alter table import_batches add column if not exists total_quantity integer not null default 0");
+  await client.query("alter table import_batches add column if not exists undone_at timestamptz");
+  await client.query(
+    "alter table import_items add column if not exists product_id uuid references products(id) on delete set null",
+  );
+  await client.query("alter table import_items add column if not exists article_number text not null default ''");
+  await client.query("alter table import_items add column if not exists product_name text not null default ''");
+  await client.query("alter table import_items add column if not exists quantity_added integer not null default 0");
+  await client.query("alter table import_items add column if not exists previous_quantity integer");
+  await client.query("alter table import_items add column if not exists previous_status product_status");
+  await client.query(`
+    do $$
+    begin
+      if exists (
+        select 1
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'import_items'
+          and column_name = 'barcode'
+      ) then
+        alter table import_items alter column barcode drop not null;
+        alter table import_items alter column barcode set default '';
+      end if;
+    end $$;
+  `);
+};
+
 export const saveProduct = createServerFn({ method: "POST" })
   .validator((data: ProductInput) => data)
   .handler(async ({ data }) => {
@@ -256,6 +285,7 @@ export const importProducts = createServerFn({ method: "POST" })
     const client = await pool.connect();
     try {
       await client.query("begin");
+      await ensureImportHistorySchema(client);
       const totalQuantity = data.products.reduce(
         (sum, product) => sum + Math.max(0, Number(product.quantity || 0)),
         0,
