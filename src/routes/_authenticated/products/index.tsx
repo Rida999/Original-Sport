@@ -55,6 +55,14 @@ type WorkbookWithFiles = XLSX.WorkBook & {
 
 const cell = (row: ImportRow, key: string) => String(row[key] ?? "").trim();
 
+const firstCell = (row: ImportRow, keys: string[]) => {
+  for (const key of keys) {
+    const value = cell(row, key);
+    if (value) return value;
+  }
+  return "";
+};
+
 const numberCell = (row: ImportRow, key: string) => {
   const raw = row[key];
   if (typeof raw === "number") return raw;
@@ -64,6 +72,14 @@ const numberCell = (row: ImportRow, key: string) => {
       .trim(),
   );
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const firstNumberCell = (row: ImportRow, keys: string[]) => {
+  for (const key of keys) {
+    const value = numberCell(row, key);
+    if (value !== 0 || cell(row, key)) return value;
+  }
+  return 0;
 };
 
 const genderCell = (gender: string, ageGroup: string): ProductGender | null => {
@@ -282,11 +298,13 @@ function ProductsList() {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<ImportRow>(sheet, { defval: "" });
       const validRows = rows.filter(
-        (row) => cell(row, "Article Number") && cell(row, "Model Name"),
+        (row) =>
+          firstCell(row, ["Article Number", "Article"]) &&
+          firstCell(row, ["Model Name", "Product Type", "Product Line", "Key Category"]),
       );
       if (validRows.length === 0)
         throw new Error(
-          "No product rows found. Expected columns like Article Number, Model Name, Qty, and Retail/Unit.",
+          "No product rows found. Expected Article Number plus Model Name, Product Type, Product Line, or Key Category.",
         );
 
       const categoryNames = unique(
@@ -294,15 +312,21 @@ function ProductsList() {
       );
 
       const products: ProductInput[] = validRows.map((row) => {
-        const articleNumber = cell(row, "Article Number");
-        const modelName = cell(row, "Model Name");
+        const articleNumber = firstCell(row, ["Article Number", "Article"]);
         const keyCategory = cell(row, "Key Category");
         const productType = stripBracketedNumber(cell(row, "Product Type"));
-        const quantity = Math.max(0, Math.round(numberCell(row, "Qty")));
-        const sellingPrice = Math.max(0, numberCell(row, "Retail/Unit"));
+        const productLine = cell(row, "Product Line");
+        const modelName =
+          firstCell(row, ["Model Name"]) || productType || productLine || keyCategory || articleNumber;
+        const quantity = Math.max(0, Math.round(firstNumberCell(row, ["Qty", "QTY"])));
+        const sellingPrice = Math.max(
+          0,
+          firstNumberCell(row, ["Retail/Unit", "RRP LB / unit", "RRP / unit", "RRP"]),
+        );
         const ageGroup = cell(row, "Age Group");
         const gender = cell(row, "Gender");
         const sourceThumbnail = cell(row, "Thumbnail");
+        const marketingLine = firstCell(row, ["Corporate Marketing Line", "Sports Category"]);
         const embeddedImage = embeddedImagesByRow.get(row.__rowNum__ ?? -1);
         const images = embeddedImage ? [embeddedImage] : sourceThumbnail ? [sourceThumbnail] : [];
 
@@ -314,10 +338,10 @@ function ProductsList() {
           key_category: keyCategory || null,
           age_group: ageGroup || null,
           gender: genderCell(gender, ageGroup),
-          sport: cell(row, "Corporate Marketing Line") || null,
-          marketing_line: cell(row, "Corporate Marketing Line") || null,
+          sport: marketingLine || null,
+          marketing_line: marketingLine || null,
           product_division: cell(row, "Product Division") || null,
-          product_line: cell(row, "Product Line") || null,
+          product_line: productLine || null,
           product_type: productType || null,
           sub_brand: cell(row, "Brand") || null,
           source_thumbnail: sourceThumbnail || embeddedImage || null,

@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS import_batches (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS item_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS total_quantity INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS undone_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS import_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   import_batch_id UUID NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
@@ -84,8 +88,26 @@ CREATE TABLE IF NOT EXISTS import_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS article_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE import_items ADD COLUMN IF NOT EXISTS quantity_added INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE import_items ADD COLUMN IF NOT EXISTS previous_quantity INTEGER;
 ALTER TABLE import_items ADD COLUMN IF NOT EXISTS previous_status product_status;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'import_items'
+      AND column_name = 'barcode'
+  ) THEN
+    ALTER TABLE import_items ALTER COLUMN barcode DROP NOT NULL;
+    ALTER TABLE import_items ALTER COLUMN barcode SET DEFAULT '';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS import_items_batch_id_idx ON import_items(import_batch_id);
 
