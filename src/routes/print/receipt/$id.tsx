@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
@@ -7,6 +7,9 @@ import { ReceiptPrintView } from "@/components/inventory/receipt-print-view";
 
 export const Route = createFileRoute("/print/receipt/$id")({
   ssr: false,
+  beforeLoad: ({ context }) => {
+    if (!context.user) throw redirect({ to: "/signin" });
+  },
   head: () => ({ meta: [{ title: "Print receipt" }] }),
   component: PrintReceiptPage,
 });

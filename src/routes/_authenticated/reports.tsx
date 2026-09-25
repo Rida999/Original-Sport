@@ -23,11 +23,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { money } from "@/lib/format";
-import { isSuperAdmin } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/reports")({
-  beforeLoad: () => {
-    if (!isSuperAdmin()) {
+  beforeLoad: ({ context }) => {
+    if (context.user?.role !== "superadmin") {
       throw redirect({ to: "/dashboard" });
     }
   },

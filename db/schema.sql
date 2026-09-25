@@ -1,5 +1,27 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+CREATE TABLE IF NOT EXISTS app_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username TEXT NOT NULL UNIQUE CHECK (username = lower(username)),
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'superadmin')),
+  must_change_password BOOLEAN NOT NULL DEFAULT true,
+  active BOOLEAN NOT NULL DEFAULT true,
+  failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TIMESTAMPTZ,
+  session_version INTEGER NOT NULL DEFAULT 1,
+  last_login_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS app_users_active_username_idx
+  ON app_users (username)
+  WHERE active;
+
+ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE app_users FROM anon, authenticated;
+
 DO $$ BEGIN
   CREATE TYPE product_gender AS ENUM ('men', 'women', 'unisex', 'kids');
 EXCEPTION
@@ -166,3 +188,41 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 DROP TRIGGER IF EXISTS products_set_updated_at ON products;
 CREATE TRIGGER products_set_updated_at BEFORE UPDATE ON products
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS app_users_set_updated_at ON app_users;
+CREATE TRIGGER app_users_set_updated_at BEFORE UPDATE ON app_users
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- This application accesses Postgres only through authenticated server
+-- functions. Keep every application table unavailable to Supabase's public
+-- Data API roles; the server's database role continues to work normally.
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE import_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE import_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipt_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipt_draft ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+    REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;
+    REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM authenticated;
+    REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
+    REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM authenticated;
+  END IF;
+END $$;

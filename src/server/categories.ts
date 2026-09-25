@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { slugify } from "@/lib/format";
+import { requireUser } from "./auth.server";
 
 export type CrudTable = "categories";
 export type CrudRow = { id: string; name: string; slug: string; description: string | null };
@@ -8,6 +9,7 @@ export type CrudRow = { id: string; name: string; slug: string; description: str
 export const listCrud = createServerFn({ method: "GET" })
   .validator((data: { table: CrudTable }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { query } = await import("./db.server");
     return query<CrudRow>(`select id, name, slug, description from ${data.table} order by name`);
   });
@@ -17,6 +19,7 @@ export const saveCrud = createServerFn({ method: "POST" })
     (data: { table: CrudTable; id?: string; name: string; description?: string | null }) => data,
   )
   .handler(async ({ data }) => {
+    await requireUser();
     const { one } = await import("./db.server");
     const payload = {
       name: data.name.trim(),
@@ -39,11 +42,13 @@ export const saveCrud = createServerFn({ method: "POST" })
 export const deleteCrud = createServerFn({ method: "POST" })
   .validator((data: { table: CrudTable; id: string }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { query } = await import("./db.server");
     await query(`delete from ${data.table} where id = $1`, [data.id]);
   });
 
 export const listCategoryOptions = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   return query<{ id: string; name: string }>("select id, name from categories order by name");
 });

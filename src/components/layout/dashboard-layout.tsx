@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Package,
@@ -15,7 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { canAccessPath, getCurrentUser, isSignedIn, signOut } from "@/lib/auth";
+import { signOutFn } from "@/server/auth";
+import { Route as RootRoute } from "@/routes/__root";
 import logo from "@/assets/logo.png";
 
 const nav = [
@@ -39,41 +40,27 @@ const getInitialNightMode = () => {
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const [nightMode, setNightMode] = useState(getInitialNightMode);
-  const currentUser = getCurrentUser();
+  const { user } = RootRoute.useRouteContext();
   const visibleNav =
-    currentUser === "superadmin" ? nav : nav.filter((item) => item.to !== "/reports");
+    user?.role === "superadmin" ? nav : nav.filter((item) => item.to !== "/reports");
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOutFn();
+    await router.invalidate();
     navigate({ to: "/signin", replace: true });
   };
 
   useEffect(() => {
-    const handlePageShow = () => {
-      if (!isSignedIn()) {
-        navigate({ to: "/signin", replace: true });
-        return;
-      }
-
-      if (!canAccessPath(pathname)) {
-        navigate({ to: "/dashboard", replace: true });
-      }
-    };
-
-    handlePageShow();
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("focus", handlePageShow);
-
-    return () => {
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("focus", handlePageShow);
-    };
-  }, [navigate, pathname]);
+    if (user?.role !== "superadmin" && pathname.startsWith("/reports")) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [navigate, pathname, user?.role]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", nightMode);

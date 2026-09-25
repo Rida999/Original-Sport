@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { Product } from "./products";
+import { requireUser } from "./auth.server";
 
 const REPORT_TIME_ZONE = "Asia/Beirut";
 
@@ -50,6 +51,7 @@ export type SalesReport = {
 };
 
 export const listReportProducts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser("superadmin");
   const { query } = await import("./db.server");
   return query<
     Pick<
@@ -68,6 +70,7 @@ export const listReportProducts = createServerFn({ method: "GET" }).handler(asyn
 });
 
 export const getSoldProductsReport = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser("superadmin");
   const { one, query } = await import("./db.server");
   const total = await one<{ count: string }>(
     "select count(*) from activity_logs where action = 'scanned_out'",
@@ -174,6 +177,7 @@ const salesPeriodSql = (period: SalesReportPeriod) => {
 export const getSalesReport = createServerFn({ method: "GET" })
   .validator((data: { period: SalesReportPeriod; date?: string }) => data)
   .handler(async ({ data }): Promise<SalesReport> => {
+    await requireUser("superadmin");
     const period =
       data.period === "week" ||
       data.period === "month" ||

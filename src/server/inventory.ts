@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { Product } from "./products";
+import { requireUser } from "./auth.server";
 
 const ensureProductQuickSaleColumn = async () => {
   const { one } = await import("./db.server");
@@ -8,6 +9,7 @@ const ensureProductQuickSaleColumn = async () => {
 };
 
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   await ensureProductQuickSaleColumn();
   const { query } = await import("./db.server");
   return query<
@@ -50,6 +52,7 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
 export const setProductQuickSale = createServerFn({ method: "POST" })
   .validator((data: { id: string; quick_sale: boolean }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     await ensureProductQuickSaleColumn();
     const { one } = await import("./db.server");
     const product = await one<{ id: string; quick_sale: boolean }>(
@@ -67,6 +70,7 @@ export const setProductQuickSale = createServerFn({ method: "POST" })
 export const adjustProductStockByArticleNumber = createServerFn({ method: "POST" })
   .validator((data: { article_number: string; mode: "remove" | "return" }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const articleNumber = data.article_number.trim();
     if (!articleNumber) throw new Error("Article number is required.");
     if (!/^[A-Za-z0-9 ]{1,20}$/.test(articleNumber)) {
@@ -155,6 +159,7 @@ export const adjustProductStockByArticleNumber = createServerFn({ method: "POST"
 export const restoreReceiptStock = createServerFn({ method: "POST" })
   .validator((data: { items: { product_id: string | null; quantity: number }[] }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const items = data.items
       .filter((item) => item.product_id && Number(item.quantity) > 0)
       .map((item) => ({

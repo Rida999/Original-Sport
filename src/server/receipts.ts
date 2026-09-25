@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { requireUser } from "./auth.server";
+
 export type ReceiptItemInput = {
   product_id: string | null;
   description: string;
@@ -98,6 +100,7 @@ export const createReceipt = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }): Promise<ReceiptWithItems> => {
+    await requireUser();
     const validItems = data.items.filter(
       (item) =>
         item.description.trim().length > 0 &&
@@ -185,6 +188,7 @@ export const createReceipt = createServerFn({ method: "POST" })
   });
 
 export const listRecentReceipts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
@@ -200,13 +204,20 @@ export const listRecentReceipts = createServerFn({ method: "GET" }).handler(asyn
 });
 
 export const listAllReceipts = createServerFn({ method: "GET" }).handler(async () => {
+  const user = await requireUser();
   const { query } = await import("./db.server");
+  const visibilityClause =
+    user.role === "superadmin"
+      ? "true"
+      : `(r.created_at at time zone 'Asia/Beirut')::date =
+         (now() at time zone 'Asia/Beirut')::date`;
   const rows = await query<ReceiptListItem>(
     `select r.id, r.invoice_number, r.customer_name, r.subtotal, r.discount, r.vat_rate,
             r.vat_amount, r.total, r.cash_paid, r.cash_exchange, r.created_at,
             count(ri.id)::int as item_count
      from receipts r
      left join receipt_items ri on ri.receipt_id = r.id
+     where ${visibilityClause}
      group by r.id
      order by r.created_at desc`,
   );
@@ -216,6 +227,7 @@ export const listAllReceipts = createServerFn({ method: "GET" }).handler(async (
 export const updateReceipt = createServerFn({ method: "POST" })
   .validator((data: ReceiptUpdateInput) => data)
   .handler(async ({ data }): Promise<ReceiptWithItems> => {
+    const user = await requireUser();
     const validItems = data.items.filter(
       (item) =>
         item.description.trim().length > 0 &&
@@ -229,6 +241,17 @@ export const updateReceipt = createServerFn({ method: "POST" })
     const client = await pool.connect();
     try {
       await client.query("begin");
+
+      if (user.role !== "superadmin") {
+        const allowed = await client.query(
+          `select 1 from receipts
+           where id = $1
+             and (created_at at time zone 'Asia/Beirut')::date =
+                 (now() at time zone 'Asia/Beirut')::date`,
+          [data.id],
+        );
+        if (!allowed.rows[0]) throw new Error("You can only edit today's receipts.");
+      }
 
       const subtotal = validItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       const discount = Math.max(0, Number(data.discount || 0));
@@ -308,9 +331,15 @@ export const updateReceipt = createServerFn({ method: "POST" })
 export const deleteReceipt = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
+    const user = await requireUser();
     const { one } = await import("./db.server");
+    const visibilityClause =
+      user.role === "superadmin"
+        ? ""
+        : `and (created_at at time zone 'Asia/Beirut')::date =
+               (now() at time zone 'Asia/Beirut')::date`;
     const deleted = await one<{ id: string; invoice_number: number }>(
-      "delete from receipts where id = $1 returning id, invoice_number",
+      `delete from receipts where id = $1 ${visibilityClause} returning id, invoice_number`,
       [data.id],
     );
 
@@ -335,6 +364,7 @@ export type ReceiptDraftLine = {
 // watching the same page both read/write this so they stay in sync via
 // polling (see refetchInterval on the client query).
 export const getDraftReceipt = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { one } = await import("./db.server");
   const row = await one<{ items: ReceiptDraftLine[]; updated_at: string }>(
     "select items, updated_at from receipt_draft where id = 'default'",
@@ -345,6 +375,7 @@ export const getDraftReceipt = createServerFn({ method: "GET" }).handler(async (
 export const getReceiptDraftSlot = createServerFn({ method: "GET" })
   .validator((data: { slot: string }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { one } = await import("./db.server");
     const row = await one<{ items: ReceiptDraftLine[]; updated_at: string }>(
       "select items, updated_at from receipt_draft where id = $1",
@@ -356,6 +387,7 @@ export const getReceiptDraftSlot = createServerFn({ method: "GET" })
 export const saveDraftReceipt = createServerFn({ method: "POST" })
   .validator((data: { items: ReceiptDraftLine[] }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { one } = await import("./db.server");
     await one(
       `insert into receipt_draft (id, items, updated_at) values ('default', $1, now())
@@ -368,6 +400,7 @@ export const saveDraftReceipt = createServerFn({ method: "POST" })
 export const saveReceiptDraftSlot = createServerFn({ method: "POST" })
   .validator((data: { slot: string; items: ReceiptDraftLine[] }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { one } = await import("./db.server");
     await one(
       `insert into receipt_draft (id, items, updated_at) values ($1, $2, now())
@@ -380,11 +413,17 @@ export const saveReceiptDraftSlot = createServerFn({ method: "POST" })
 export const getReceipt = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }): Promise<ReceiptWithItems | null> => {
+    const user = await requireUser();
     const { one, query } = await import("./db.server");
+    const visibilityClause =
+      user.role === "superadmin"
+        ? ""
+        : `and (created_at at time zone 'Asia/Beirut')::date =
+               (now() at time zone 'Asia/Beirut')::date`;
     const receipt = await one<Receipt>(
       `select id, invoice_number, customer_name, subtotal, discount, vat_rate, vat_amount,
               total, cash_paid, cash_exchange, created_at
-       from receipts where id = $1`,
+       from receipts where id = $1 ${visibilityClause}`,
       [data.id],
     );
     if (!receipt) return null;

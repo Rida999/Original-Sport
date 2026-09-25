@@ -1,19 +1,19 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { Lock, ShieldCheck } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { changeSuperAdminPassword, isSignedIn, signIn } from "@/lib/auth";
+import { changeInitialPasswordFn, signInFn } from "@/server/auth";
 import logo from "@/assets/logo.png";
 
 export const Route = createFileRoute("/signin")({
   ssr: false,
-  beforeLoad: () => {
-    if (isSignedIn()) {
+  beforeLoad: ({ context }) => {
+    if (context.user) {
       throw redirect({ to: "/dashboard" });
     }
   },
@@ -22,43 +22,54 @@ export const Route = createFileRoute("/signin")({
 
 function SignInPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    window.localStorage.removeItem("original-sport-authenticated");
+    window.localStorage.removeItem("original-sport-auth-user");
+    window.localStorage.removeItem("original-sport-superadmin-password");
+  }, []);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = signIn(username, password);
+    setIsSubmitting(true);
+    try {
+      const result = await signInFn({ data: { username, password } });
 
-    if (!result.success) {
-      toast.error("Invalid username or password");
-      return;
+      if (!result.success) {
+        toast.error("Invalid username or password");
+        return;
+      }
+
+      if (result.requiresPasswordChange) {
+        setMustChangePassword(true);
+        setNewPassword("");
+        setConfirmPassword("");
+        toast.info("Please choose a new private password");
+        return;
+      }
+
+      await router.invalidate();
+      navigate({ to: "/dashboard", replace: true });
+    } catch {
+      toast.error("Unable to sign in. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (result.requiresPasswordChange) {
-      setMustChangePassword(true);
-      setNewPassword("");
-      setConfirmPassword("");
-      toast.info("Please choose a new superadmin password");
-      return;
-    }
-
-    navigate({ to: "/dashboard", replace: true });
   };
 
-  const handlePasswordChange = (event: FormEvent<HTMLFormElement>) => {
+  const handlePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedPassword = newPassword.trim();
 
-    if (trimmedPassword.length < 6) {
-      toast.error("Use at least 6 characters for the new password");
-      return;
-    }
-
-    if (trimmedPassword.toLowerCase() === "superadmin") {
-      toast.error("Choose a password different from the default one");
+    if (trimmedPassword.length < 12) {
+      toast.error("Use at least 12 characters for the new password");
       return;
     }
 
@@ -67,9 +78,17 @@ function SignInPage() {
       return;
     }
 
-    changeSuperAdminPassword(newPassword);
-    toast.success("Superadmin password changed");
-    navigate({ to: "/dashboard", replace: true });
+    setIsSubmitting(true);
+    try {
+      await changeInitialPasswordFn({ data: { password: newPassword } });
+      await router.invalidate();
+      toast.success("Password changed");
+      navigate({ to: "/dashboard", replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to change password");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -128,7 +147,7 @@ function SignInPage() {
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {mustChangePassword
-                      ? "Create a private password for the superadmin account."
+                      ? "Create a private password for this account."
                       : "Enter your admin credentials."}
                   </p>
                 </div>
@@ -160,7 +179,11 @@ function SignInPage() {
                     onChange={(event) => setConfirmPassword(event.target.value)}
                   />
                 </div>
-                <Button type="submit" className="h-12 w-full text-base sm:h-11 sm:text-sm">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="h-12 w-full text-base sm:h-11 sm:text-sm"
+                >
                   Save new password
                 </Button>
               </form>
@@ -188,8 +211,12 @@ function SignInPage() {
                     onChange={(event) => setPassword(event.target.value)}
                   />
                 </div>
-                <Button type="submit" className="h-12 w-full text-base sm:h-11 sm:text-sm">
-                  Sign in
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="h-12 w-full text-base sm:h-11 sm:text-sm"
+                >
+                  {isSubmitting ? "Signing in…" : "Sign in"}
                 </Button>
               </form>
             )}

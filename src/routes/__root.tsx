@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportClientError } from "../lib/error-reporting";
 import { Toaster } from "@/components/ui/sonner";
+import { getCurrentUserFn, type AuthUser } from "@/server/auth";
 
 function NotFoundComponent() {
   return (
@@ -56,7 +57,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  user?: AuthUser | null;
+}>()({
+  headers: () => ({
+    "Cache-Control": "private, no-store",
+  }),
+  beforeLoad: async () => ({ user: await getCurrentUserFn() }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },

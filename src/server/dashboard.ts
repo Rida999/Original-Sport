@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { Product } from "./products";
+import { requireUser } from "./auth.server";
 
 export const getDashboardStats = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { one, query } = await import("./db.server");
   const [products, stock, outOfStockCount, outOfStock, recent, activity] = await Promise.all([
     one<{ count: string }>("select count(*) from products"),

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { slugify } from "@/lib/format";
+import { requireUser } from "./auth.server";
 
 export type ProductGender = "men" | "women" | "unisex" | "kids";
 export type ProductStatus = "available" | "out_of_stock" | "discontinued";
@@ -92,6 +93,7 @@ const productColumns = `
 `;
 
 export const listProducts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   return query<Product>(
     `select ${productColumns}
@@ -103,6 +105,7 @@ export const listProducts = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const listArchivedProducts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   return query<Product>(
     `select ${productColumns}
@@ -114,6 +117,7 @@ export const listArchivedProducts = createServerFn({ method: "GET" }).handler(as
 });
 
 export const listProductBrands = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   const rows = await query<{ sub_brand: string }>(
     `select distinct trim(sub_brand) as sub_brand
@@ -127,6 +131,7 @@ export const listProductBrands = createServerFn({ method: "GET" }).handler(async
 export const getProduct = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { one } = await import("./db.server");
     return one<Product>(
       `select ${productColumns}
@@ -195,6 +200,7 @@ const ensureImportHistorySchema = async (client: DbClient) => {
 export const saveProduct = createServerFn({ method: "POST" })
   .validator((data: ProductInput) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const articleNumber = data.article_number.trim();
     if (!/^[A-Za-z0-9 ]{1,20}$/.test(articleNumber)) {
       throw new Error("Article number must be 20 characters or less with no special characters.");
@@ -273,6 +279,7 @@ export const saveProduct = createServerFn({ method: "POST" })
 export const deleteProducts = createServerFn({ method: "POST" })
   .validator((data: { ids: string[] }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { query } = await import("./db.server");
     await query("delete from products where id = any($1::uuid[])", [data.ids]);
   });
@@ -280,6 +287,7 @@ export const deleteProducts = createServerFn({ method: "POST" })
 export const importProducts = createServerFn({ method: "POST" })
   .validator((data: { products: ProductInput[]; categories: string[]; fileName?: string }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { getPool } = await import("./db.server");
     const pool = getPool();
     const client = await pool.connect();
@@ -416,6 +424,7 @@ export const importProducts = createServerFn({ method: "POST" })
   });
 
 export const listImportBatches = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const { query } = await import("./db.server");
   return query<ImportBatch>(
     `select id, file_name, item_count, total_quantity, undone_at, created_at
@@ -429,6 +438,7 @@ export const listImportBatches = createServerFn({ method: "GET" }).handler(async
 export const undoImportBatch = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
+    await requireUser();
     const { getPool } = await import("./db.server");
     const pool = getPool();
     const client = await pool.connect();

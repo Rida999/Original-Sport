@@ -37,7 +37,7 @@ import {
   type ReceiptWithItems,
 } from "@/server/receipts";
 import { money } from "@/lib/format";
-import { getCurrentUser } from "@/lib/auth";
+import { Route as RootRoute } from "@/routes/__root";
 
 export const Route = createFileRoute("/_authenticated/receipts")({
   head: () => ({ meta: [{ title: "Receipts — SportsWear Inventory" }] }),
@@ -117,8 +117,8 @@ function ReceiptsPage() {
     cash_exchange: "0",
   });
   const [items, setItems] = useState<ReceiptItemForm[]>([emptyItem()]);
-  const currentUser = getCurrentUser();
-  const showTodayOnly = currentUser !== "superadmin";
+  const { user } = RootRoute.useRouteContext();
+  const showTodayOnly = user?.role !== "superadmin";
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["all-receipts"],

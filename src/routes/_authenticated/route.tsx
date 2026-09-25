@@ -1,12 +1,10 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { isSignedIn } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated")({
-  ssr: false,
-  beforeLoad: () => {
-    if (!isSignedIn()) {
+  beforeLoad: ({ context }) => {
+    if (!context.user) {
       throw redirect({ to: "/signin" });
     }
   },
